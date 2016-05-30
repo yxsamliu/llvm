@@ -46,7 +46,7 @@ void llvm::initializeScalarOpts(PassRegistry &Registry) {
   initializeEarlyCSELegacyPassPass(Registry);
   initializeFlattenCFGPassPass(Registry);
   initializeInductiveRangeCheckEliminationPass(Registry);
-  initializeIndVarSimplifyPass(Registry);
+  initializeIndVarSimplifyLegacyPassPass(Registry);
   initializeJumpThreadingPass(Registry);
   initializeLICMPass(Registry);
   initializeLoopDataPrefetchPass(Registry);
@@ -67,7 +67,7 @@ void llvm::initializeScalarOpts(PassRegistry &Registry) {
   initializeMemCpyOptPass(Registry);
   initializeMergedLoadStoreMotionPass(Registry);
   initializeNaryReassociatePass(Registry);
-  initializePartiallyInlineLibCallsPass(Registry);
+  initializePartiallyInlineLibCallsLegacyPassPass(Registry);
   initializeReassociateLegacyPassPass(Registry);
   initializeRegToMemPass(Registry);
   initializeRewriteStatepointsForGCPass(Registry);

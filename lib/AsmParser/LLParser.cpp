@@ -212,6 +212,8 @@ bool LLParser::ValidateEndOfModule() {
 
   UpgradeDebugInfo(*M);
 
+  UpgradeModuleFlags(*M);
+
   if (!Slots)
     return false;
   // Initialize the slot mapping.
@@ -4666,7 +4668,7 @@ bool LLParser::ParseFunctionHeader(Function *&Fn, bool isDefine) {
   Fn->setSection(Section);
   Fn->setComdat(C);
   Fn->setPersonalityFn(PersonalityFn);
-  if (!GC.empty()) Fn->setGC(GC.c_str());
+  if (!GC.empty()) Fn->setGC(GC);
   Fn->setPrefixData(Prefix);
   Fn->setPrologueData(Prologue);
   ForwardRefAttrGroups[Fn] = FwdRefAttrGrps;

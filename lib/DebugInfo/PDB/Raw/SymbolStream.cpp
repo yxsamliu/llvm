@@ -30,20 +30,13 @@ SymbolStream::~SymbolStream() {}
 Error SymbolStream::reload() {
   codeview::StreamReader Reader(MappedStream);
 
-  if (Stream.initialize(Reader, MappedStream.getLength()))
-    return make_error<RawError>(raw_error_code::corrupt_file,
-                                "Could not load symbol stream.");
+  if (auto EC = Reader.readArray(SymbolRecords, MappedStream.getLength()))
+    return EC;
 
   return Error::success();
 }
 
-iterator_range<codeview::SymbolIterator> SymbolStream::getSymbols() const {
-  using codeview::SymbolIterator;
-  ArrayRef<uint8_t> Data;
-  if (auto Error = Stream.getArrayRef(0, Data, Stream.getLength())) {
-    consumeError(std::move(Error));
-    return iterator_range<SymbolIterator>(SymbolIterator(), SymbolIterator());
-  }
-
-  return codeview::makeSymbolRange(Data, nullptr);
+iterator_range<codeview::CVSymbolArray::Iterator>
+SymbolStream::getSymbols(bool *HadError) const {
+  return llvm::make_range(SymbolRecords.begin(HadError), SymbolRecords.end());
 }
