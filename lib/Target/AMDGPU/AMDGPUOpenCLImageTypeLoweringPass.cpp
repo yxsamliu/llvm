@@ -292,20 +292,21 @@ class AMDGPUOpenCLImageTypeLoweringPass : public ModulePass {
     return NewF;
   }
 
-  bool transformKernels(Function &F) {
+  bool transformKernels(Function *F) {
     bool Modified = false;
-    auto M = F.getParent();
+    auto M = F->getParent();
     Function *NewF;
-    NewF = addImplicitArgs(&F);
+    NewF = addImplicitArgs(F);
     if (NewF) {
       // Replace old function and metadata with new ones.
-      F.eraseFromParent();
+      F->eraseFromParent();
       M->getFunctionList().push_back(NewF);
       M->getOrInsertFunction(NewF->getName(), NewF->getFunctionType(),
                              NewF->getAttributes());
       Modified = true;
+      F = NewF;
     }
-    Modified |= replaceImageAndSamplerUses(NewF);
+    Modified |= replaceImageAndSamplerUses(F);
     return Modified;
   }
 
@@ -321,7 +322,7 @@ class AMDGPUOpenCLImageTypeLoweringPass : public ModulePass {
     bool Changed = false;
     for (auto &F: M.functions())
       if (F.getMetadata(KernelArgMDNodeNames[0]))
-        Changed |= transformKernels(F);
+        Changed |= transformKernels(&F);
     return Changed;
   }
 
