@@ -78,38 +78,6 @@ IsSamplerType(StringRef TypeString) {
   return TypeString == "sampler_t";
 }
 
-static Function *
-GetFunctionFromMDNode(MDNode *Node) {
-  if (!Node)
-    return nullptr;
-
-  size_t NumOps = Node->getNumOperands();
-  if (NumOps != NumKernelArgMDNodes + 1)
-    return nullptr;
-
-  auto F = mdconst::dyn_extract<Function>(Node->getOperand(0));
-  if (!F)
-    return nullptr;
-
-  // Sanity checks.
-  size_t ExpectNumArgNodeOps = F->arg_size() + 1;
-  for (size_t i = 0; i < NumKernelArgMDNodes; ++i) {
-    MDNode *ArgNode = dyn_cast_or_null<MDNode>(Node->getOperand(i + 1));
-    if (ArgNode->getNumOperands() != ExpectNumArgNodeOps)
-      return nullptr;
-    if (!ArgNode->getOperand(0))
-      return nullptr;
-
-    // FIXME: It should be possible to do image lowering when some metadata
-    // args missing or not in the expected order.
-    MDString *StringNode = dyn_cast<MDString>(ArgNode->getOperand(0));
-    if (!StringNode || StringNode->getString() != KernelArgMDNodeNames[i])
-      return nullptr;
-  }
-
-  return F;
-}
-
 static StringRef
 AccessQualFromMD(Function &F, unsigned ArgIdx) {
   return cast<MDString>(F.getMetadata(KernelArgMDNodeNames[1])->getOperand(
@@ -221,7 +189,7 @@ class AMDGPUOpenCLImageTypeLoweringPass : public ModulePass {
     return Modified;
   }
 
-  bool replaceImageAndSamplerUses(Function *F, MDNode *KernelMDNode) {
+  bool replaceImageAndSamplerUses(Function *F) {
     uint32_t NumReadOnlyImageArgs = 0;
     uint32_t NumWriteOnlyImageArgs = 0;
     uint32_t NumReadWriteImageArgs = 0;
@@ -296,7 +264,7 @@ class AMDGPUOpenCLImageTypeLoweringPass : public ModulePass {
       Modified = true;
     }
     if (!Modified) {
-      return std::make_tuple(nullptr, nullptr);
+      return nullptr;
     }
 
     // Create function with new signature and clone the old body into it.
@@ -351,8 +319,9 @@ class AMDGPUOpenCLImageTypeLoweringPass : public ModulePass {
     ImageFormatType = ArrayType::get(Int32Type, 2);
 
     bool Changed = false;
-    for (auto F: M.functions())
-      Changed != transformKernels(F);
+    for (auto &F: M.functions())
+      if (F.getMetadata(KernelArgMDNodeNames[0]))
+        Changed |= transformKernels(F);
     return Changed;
   }
 
