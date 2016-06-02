@@ -46,7 +46,7 @@ StringRef GetSamplerResourceIDFunc = "llvm.OpenCL.sampler.get.resource.id";
 StringRef ImageSizeArgMDType =   "__llvm_image_size";
 StringRef ImageFormatArgMDType = "__llvm_image_format";
 
-StringRef KernelsMDNodeName = "opencl.kernels";
+// Name of kernel argument metadata.
 StringRef KernelArgMDNodeNames[] = {
   "kernel_arg_addr_space",
   "kernel_arg_access_qual",
@@ -56,6 +56,11 @@ StringRef KernelArgMDNodeNames[] = {
 const unsigned NumKernelArgMDNodes = 5;
 
 typedef SmallVector<Metadata *, 8> MDVector;
+
+// Structure containing all kernel argument metadata for a kernel.
+// Each element of ArgVector contains operands for a specific kernel argument
+// metadata whose name corresponds to element of KernelArgMDNodeNames with
+// the same array index.
 struct KernelArgMD {
   MDVector ArgVector[NumKernelArgMDNodes];
 };
@@ -64,7 +69,8 @@ struct KernelArgMD {
 
 static inline bool
 IsImageType(StringRef TypeString) {
-  return TypeString == "image2d_t" || TypeString == "image3d_t";
+  return TypeString == "image2d_t"
+      || TypeString == "image3d_t";
 }
 
 static inline bool
@@ -105,26 +111,32 @@ GetFunctionFromMDNode(MDNode *Node) {
 }
 
 static StringRef
-AccessQualFromMD(MDNode *KernelMDNode, unsigned ArgIdx) {
-  MDNode *ArgAQNode = cast<MDNode>(KernelMDNode->getOperand(2));
-  return cast<MDString>(ArgAQNode->getOperand(ArgIdx + 1))->getString();
+AccessQualFromMD(Function &F, unsigned ArgIdx) {
+  return cast<MDString>(F.getMetadata(KernelArgMDNodeNames[1])->getOperand(
+    ArgIdx))->getString();
 }
 
 static StringRef
-ArgTypeFromMD(MDNode *KernelMDNode, unsigned ArgIdx) {
-  MDNode *ArgTypeNode = cast<MDNode>(KernelMDNode->getOperand(3));
-  return cast<MDString>(ArgTypeNode->getOperand(ArgIdx + 1))->getString();
+ArgTypeFromMD(Function &F, unsigned ArgIdx) {
+  return cast<MDString>(F.getMetadata(KernelArgMDNodeNames[3])->getOperand(
+    ArgIdx))->getString();
 }
 
+// Get metadata for an argument and return them as a vector.
+// \param ArgInd argument index.
+// \return vector containing metadata for the given argument.
 static MDVector
-GetArgMD(MDNode *KernelMDNode, unsigned OpIdx) {
+GetArgMD(Function &F, unsigned ArgInd) {
   MDVector Res;
-  for (unsigned i = 0; i < NumKernelArgMDNodes; ++i) {
-    MDNode *Node = cast<MDNode>(KernelMDNode->getOperand(i + 1));
-    Res.push_back(Node->getOperand(OpIdx));
-  }
+  for (unsigned i = 0; i < NumKernelArgMDNodes; ++i)
+    Res.push_back(F.getMetadata(KernelArgMDNodeNames[i])->getOperand(ArgInd));
   return Res;
 }
+
+// Put metadata for an argument into KernelArgMD.
+// Each element of member
+// \param MD is the container for all kernel argument metadata.
+// \param V contains metadata for an argument.
 
 static void
 PushArgMD(KernelArgMD &MD, const MDVector &V) {
@@ -212,22 +224,25 @@ class AMDGPUOpenCLImageTypeLoweringPass : public ModulePass {
   bool replaceImageAndSamplerUses(Function *F, MDNode *KernelMDNode) {
     uint32_t NumReadOnlyImageArgs = 0;
     uint32_t NumWriteOnlyImageArgs = 0;
+    uint32_t NumReadWriteImageArgs = 0;
     uint32_t NumSamplerArgs = 0;
 
     bool Modified = false;
     InstsToErase.clear();
     for (auto ArgI = F->arg_begin(); ArgI != F->arg_end(); ++ArgI) {
       Argument &Arg = *ArgI;
-      StringRef Type = ArgTypeFromMD(KernelMDNode, Arg.getArgNo());
+      StringRef Type = ArgTypeFromMD(*F, Arg.getArgNo());
 
       // Handle image types.
       if (IsImageType(Type)) {
-        StringRef AccessQual = AccessQualFromMD(KernelMDNode, Arg.getArgNo());
+        StringRef AccessQual = AccessQualFromMD(*F, Arg.getArgNo());
         uint32_t ResourceID;
         if (AccessQual == "read_only") {
           ResourceID = NumReadOnlyImageArgs++;
         } else if (AccessQual == "write_only") {
           ResourceID = NumWriteOnlyImageArgs++;
+        } else if (AccessQual == "read_write") {
+          ResourceID = NumReadWriteImageArgs++;
         } else {
           llvm_unreachable("Wrong image access qualifier.");
         }
@@ -249,8 +264,8 @@ class AMDGPUOpenCLImageTypeLoweringPass : public ModulePass {
     return Modified;
   }
 
-  std::tuple<Function *, MDNode *>
-  addImplicitArgs(Function *F, MDNode *KernelMDNode) {
+  Function *
+  addImplicitArgs(Function *F) {
     bool Modified = false;
 
     FunctionType *FT = F->getFunctionType();
@@ -258,15 +273,14 @@ class AMDGPUOpenCLImageTypeLoweringPass : public ModulePass {
 
     // Metadata operands for new MDNode.
     KernelArgMD NewArgMDs;
-    PushArgMD(NewArgMDs, GetArgMD(KernelMDNode, 0));
 
     // Add implicit arguments to the signature.
     for (unsigned i = 0; i < FT->getNumParams(); ++i) {
       ArgTypes.push_back(FT->getParamType(i));
-      MDVector ArgMD = GetArgMD(KernelMDNode, i + 1);
+      MDVector ArgMD = GetArgMD(*F, i);
       PushArgMD(NewArgMDs, ArgMD);
 
-      if (!IsImageType(ArgTypeFromMD(KernelMDNode, i)))
+      if (!IsImageType(ArgTypeFromMD(*F, i)))
         continue;
 
       // Add size implicit argument.
@@ -294,7 +308,7 @@ class AMDGPUOpenCLImageTypeLoweringPass : public ModulePass {
       auto ArgName = Arg.getName();
       NewFArgIt->setName(ArgName);
       VMap[&Arg] = &(*NewFArgIt++);
-      if (IsImageType(ArgTypeFromMD(KernelMDNode, Arg.getArgNo()))) {
+      if (IsImageType(ArgTypeFromMD(*F, Arg.getArgNo()))) {
         (NewFArgIt++)->setName(Twine("__size_") + ArgName);
         (NewFArgIt++)->setName(Twine("__format_") + ArgName);
       }
@@ -302,47 +316,28 @@ class AMDGPUOpenCLImageTypeLoweringPass : public ModulePass {
     SmallVector<ReturnInst*, 8> Returns;
     CloneFunctionInto(NewF, F, VMap, /*ModuleLevelChanges=*/false, Returns);
 
-    // Build new MDNode.
-    SmallVector<llvm::Metadata *, 6> KernelMDArgs;
-    KernelMDArgs.push_back(ConstantAsMetadata::get(NewF));
+    // Update function metadata.
     for (unsigned i = 0; i < NumKernelArgMDNodes; ++i)
-      KernelMDArgs.push_back(MDNode::get(*Context, NewArgMDs.ArgVector[i]));
-    MDNode *NewMDNode = MDNode::get(*Context, KernelMDArgs);
+      NewF->setMetadata(KernelArgMDNodeNames[i],
+                        MDNode::get(*Context, NewArgMDs.ArgVector[i]));
 
-    return std::make_tuple(NewF, NewMDNode);
+    return NewF;
   }
 
-  bool transformKernels(Module &M) {
-    NamedMDNode *KernelsMDNode = M.getNamedMetadata(KernelsMDNodeName);
-    if (!KernelsMDNode)
-      return false;
-
+  bool transformKernels(Function &F) {
     bool Modified = false;
-    for (unsigned i = 0; i < KernelsMDNode->getNumOperands(); ++i) {
-      MDNode *KernelMDNode = KernelsMDNode->getOperand(i);
-      Function *F = GetFunctionFromMDNode(KernelMDNode);
-      if (!F)
-        continue;
-
-      Function *NewF;
-      MDNode *NewMDNode;
-      std::tie(NewF, NewMDNode) = addImplicitArgs(F, KernelMDNode);
-      if (NewF) {
-        // Replace old function and metadata with new ones.
-        F->eraseFromParent();
-        M.getFunctionList().push_back(NewF);
-        M.getOrInsertFunction(NewF->getName(), NewF->getFunctionType(),
-                              NewF->getAttributes());
-        KernelsMDNode->setOperand(i, NewMDNode);
-
-        F = NewF;
-        KernelMDNode = NewMDNode;
-        Modified = true;
-      }
-
-      Modified |= replaceImageAndSamplerUses(F, KernelMDNode);
+    auto M = F.getParent();
+    Function *NewF;
+    NewF = addImplicitArgs(&F);
+    if (NewF) {
+      // Replace old function and metadata with new ones.
+      F.eraseFromParent();
+      M->getFunctionList().push_back(NewF);
+      M->getOrInsertFunction(NewF->getName(), NewF->getFunctionType(),
+                             NewF->getAttributes());
+      Modified = true;
     }
-
+    Modified |= replaceImageAndSamplerUses(NewF);
     return Modified;
   }
 
@@ -355,7 +350,10 @@ class AMDGPUOpenCLImageTypeLoweringPass : public ModulePass {
     ImageSizeType = ArrayType::get(Int32Type, 3);
     ImageFormatType = ArrayType::get(Int32Type, 2);
 
-    return transformKernels(M);
+    bool Changed = false;
+    for (auto F: M.functions())
+      Changed != transformKernels(F);
+    return Changed;
   }
 
   const char *getPassName() const override {
