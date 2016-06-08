@@ -255,7 +255,7 @@ public:
   }
 
   /// Add target-specific pre-linking passes to the specified pass manager.
-  virtual void addPreLinkPasses(PassManagerBase &, raw_pwrite_stream &) {}
+  virtual void addPreLinkPasses(PassManagerBase &) {}
 
   /// True if subtarget inserts the final scheduling pass on its own.
   ///
