@@ -142,6 +142,37 @@ void AMDGPUAsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
   AsmPrinter::EmitGlobalVariable(GV);
 }
 
+static Twine getOCLTypeName(Type *Ty, bool isSigned) {
+  if (VectorType* VecTy = dyn_cast<VectorType>(Ty)) {
+    Type* EleTy = VecTy->getElementType();
+    unsigned Size = VecTy->getVectorNumElements();
+    return getOCLTypeName(EleTy, isSigned) + Twine(Size);
+  }
+  if (Ty->isHalfTy())
+      return "half";
+  if (Ty->isFloatTy())
+    return "float";
+  if (Ty->isDoubleTy())
+    return "double";
+  if (!isSigned)
+    return Twine("u") + getOCLTypeName(Ty, true);
+  if (IntegerType* intTy = dyn_cast<IntegerType>(Ty)) {
+    switch (intTy->getIntegerBitWidth()) {
+    case 8:
+      return "char";
+    case 16:
+      return "short";
+    case 32:
+      return "int";
+    case 64:
+      return "long";
+    default:
+      llvm_unreachable("invalid integer type");
+    }
+  }
+  llvm_unreachable("invalid type");
+}
+
 bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
 
   // The starting address of all shader programs must be 256 bytes aligned.
@@ -233,6 +264,35 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
       OutStreamer->EmitBytes(StringRef(DisasmLines[i]));
       OutStreamer->EmitBytes(StringRef(Comment));
     }
+  }
+
+  // Output kernel attributes and argument info.
+  OutStreamer->SwitchSection(
+      Context.getELFSection(".Kernel.Attributes", ELF::SHT_PROGBITS, 0));
+  const Function *F = MF.getFunction();
+  if (MDNode *MD = F->getMetadata("reqd_work_group_size")) {
+    OutStreamer->emitRawComment(F->getName() + Twine(".RWGS=")
+      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(0))
+        ->getZExtValue()) + Twine(" ")
+      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(1))
+        ->getZExtValue()) + Twine(" ")
+      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(2))
+        ->getZExtValue()));
+  }
+  if (MDNode *MD = F->getMetadata("work_group_size_hint")) {
+    OutStreamer->emitRawComment(F->getName() + Twine(".WGSH=")
+      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(0))
+        ->getZExtValue()) + Twine(" ")
+      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(1))
+        ->getZExtValue()) + Twine(" ")
+      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(2))
+        ->getZExtValue()));
+  }
+  if (MDNode *MD = F->getMetadata("vec_type_hint")) {
+    OutStreamer->emitRawComment(F->getName() + Twine(".VTH=")
+      + Twine(getOCLTypeName(cast<ValueAsMetadata>(MD->getOperand(0))
+          ->getType(), mdconst::dyn_extract<ConstantInt>(MD->getOperand(1))
+          ->getZExtValue())));
   }
 
   return false;
