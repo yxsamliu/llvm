@@ -142,11 +142,11 @@ void AMDGPUAsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
   AsmPrinter::EmitGlobalVariable(GV);
 }
 
-static Twine getOCLTypeName(Type *Ty, bool isSigned) {
+static std::string getOCLTypeName(Type *Ty, bool isSigned) {
   if (VectorType* VecTy = dyn_cast<VectorType>(Ty)) {
     Type* EleTy = VecTy->getElementType();
     unsigned Size = VecTy->getVectorNumElements();
-    return getOCLTypeName(EleTy, isSigned) + Twine(Size);
+    return (Twine(getOCLTypeName(EleTy, isSigned)) + Twine(Size)).str();
   }
   if (Ty->isHalfTy())
       return "half";
@@ -155,7 +155,7 @@ static Twine getOCLTypeName(Type *Ty, bool isSigned) {
   if (Ty->isDoubleTy())
     return "double";
   if (!isSigned)
-    return Twine("u") + getOCLTypeName(Ty, true);
+    return std::string("u") + getOCLTypeName(Ty, true);
   if (IntegerType* intTy = dyn_cast<IntegerType>(Ty)) {
     switch (intTy->getIntegerBitWidth()) {
     case 8:
