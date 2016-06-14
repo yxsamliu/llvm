@@ -292,9 +292,9 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   }
   if (MDNode *MD = F->getMetadata("vec_type_hint")) {
     OutStreamer->emitRawComment(F->getName() + Twine(".VTH=")
-      + Twine(getOCLTypeName(cast<ValueAsMetadata>(MD->getOperand(0))
-          ->getType(), mdconst::dyn_extract<ConstantInt>(MD->getOperand(1))
-          ->getZExtValue())));
+      + getOCLTypeName(cast<ValueAsMetadata>(MD->getOperand(0))->getType(),
+                       mdconst::dyn_extract<ConstantInt>(MD->getOperand(1))
+                         ->getZExtValue()));
   }
 
   return false;
