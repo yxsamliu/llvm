@@ -43,7 +43,7 @@
 using namespace llvm;
 
 namespace {
-  const char OPENCL_METADATA_SECTION[] = ".OpenCL.Metadata";
+  const char OpenCLMetadataSectionName[] = ".OpenCL.Metadata";
 }
 
 // TODO: This should get the default rounding mode from the kernel. We just set
@@ -115,7 +115,7 @@ void AMDGPUAsmPrinter::EmitStartOfAsmFile(Module &M) {
   AMDGPU::IsaVersion ISA = AMDGPU::getIsaVersion(STI->getFeatureBits());
   TS->EmitDirectiveHSACodeObjectISA(ISA.Major, ISA.Minor, ISA.Stepping,
                                     "AMD", "AMDGPU");
-  EmitStartOfOpenCLMetadata(M);
+  emitStartOfOpenCLMetadata(M);
 }
 
 void AMDGPUAsmPrinter::EmitFunctionBodyStart() {
@@ -242,7 +242,7 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
-  EmitOpenCLMetadata(*MF.getFunction());
+  emitOpenCLMetadata(*MF.getFunction());
 
   return false;
 }
@@ -719,14 +719,14 @@ bool AMDGPUAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
   return false;
 }
 
-void AMDGPUAsmPrinter::EmitStartOfOpenCLMetadata(const Module &M) {
-    unsigned N = 0;
-    for (auto &I:M.functions())
-      if (I.getMetadata("kernel_arg_type"))
-        ++N;
+void AMDGPUAsmPrinter::emitStartOfOpenCLMetadata(const Module &M) {
+  unsigned N = 0;
+  for (auto &I : M.functions())
+    if (I.getMetadata("kernel_arg_type"))
+      ++N;
 
   OutStreamer->SwitchSection(getObjFileLowering().getContext()
-    .getELFSection(OPENCL_METADATA_SECTION, ELF::SHT_PROGBITS, 0));
+    .getELFSection(OpenCLMetadataSectionName, ELF::SHT_PROGBITS, 0));
   OutStreamer->EmitIntValue(N, 4);
 }
 
@@ -736,16 +736,16 @@ static Twine getOCLTypeName(Type *Ty, bool isSigned) {
     unsigned Size = VecTy->getVectorNumElements();
     return getOCLTypeName(EleTy, isSigned) + Twine(Size);
   }
-  if (Ty->isHalfTy())
-      return "half";
-  if (Ty->isFloatTy())
-    return "float";
-  if (Ty->isDoubleTy())
-    return "double";
-  if (!isSigned)
-    return Twine("u") + getOCLTypeName(Ty, true);
-  if (IntegerType* intTy = dyn_cast<IntegerType>(Ty)) {
-    switch (intTy->getIntegerBitWidth()) {
+  switch (Ty->getTypeID()) {
+  case Type::HalfTyID:   return "half";
+  case Type::FloatTyID:  return "float";
+  case Type::DoubleTyID: return "double";
+  case Type::IntegerTyID: {
+    if (!isSigned)
+      return Twine("u") + getOCLTypeName(Ty, true);
+    auto IntTy = cast<IntegerType>(Ty);
+    auto BW = IntTy->getIntegerBitWidth();
+    switch (BW) {
     case 8:
       return "char";
     case 16:
@@ -755,25 +755,27 @@ static Twine getOCLTypeName(Type *Ty, bool isSigned) {
     case 64:
       return "long";
     default:
-      llvm_unreachable("invalid integer type");
+      return Twine("i") + Twine(BW);
     }
   }
-  llvm_unreachable("invalid type");
+  default:
+    llvm_unreachable("invalid type");
+  }
 }
 
-void AMDGPUAsmPrinter::EmitOpenCLMetadata(const Function &F) {
+void AMDGPUAsmPrinter::emitOpenCLMetadata(const Function &F) {
   if (!F.getMetadata("kernel_arg_type"))
     return;
 
   MCContext &Context = getObjFileLowering().getContext();
   OutStreamer->SwitchSection(
-      Context.getELFSection(OPENCL_METADATA_SECTION, ELF::SHT_PROGBITS, 0));
+      Context.getELFSection(OpenCLMetadataSectionName, ELF::SHT_PROGBITS, 0));
   OutStreamer->EmitIntValue(F.getFunctionType()->getNumParams(), 4);
 
   for (auto &Arg:F.args()) {
     unsigned I = Arg.getArgNo();
 
-    enum KernelArgType : char{
+    enum KernelArgType : char {
       KAT_Pointer   = 0,
       KAT_Value     = 1,
       KAT_Image     = 2,
@@ -781,7 +783,7 @@ void AMDGPUAsmPrinter::EmitOpenCLMetadata(const Function &F) {
       KAT_Queue     = 4,
     };
 
-    enum KernelArgDataType : char{
+    enum KernelArgDataType : char {
       KDT_struct  = 0,
       KDT_i8      = 1,
       KDT_u8      = 2,
@@ -884,31 +886,23 @@ void AMDGPUAsmPrinter::EmitOpenCLMetadata(const Function &F) {
       void setTypeQualifier(StringRef Q) {
         SmallVector<StringRef, 1> SplitQ;
         Q.split(SplitQ, " ", -1, false/* drop empty entry*/);
+        TypeQual = 0;
         for (auto &I:SplitQ) {
-          if (I == "volatile")
-            TypeQual |= (unsigned)KTQ_volatile;
-          else if (I == "restrict")
-            TypeQual |= (unsigned)KTQ_restrict;
-          else if (I == "const")
-            TypeQual |= (unsigned)KTQ_const;
-          else if (I == "pipe")
-            TypeQual |= (unsigned)KTQ_pipe;
-          else
-            llvm_unreachable("invalid type qualifier");
+          TypeQual |= StringSwitch<unsigned>(I)
+            .Case("volatile", KTQ_volatile)
+            .Case("restrict", KTQ_restrict)
+            .Case("const",    KTQ_const)
+            .Case("pipe",     KTQ_pipe)
+            .Default(0);
         }
       }
 
-      void setAccessQualifier (StringRef Q) {
-        if (Q == "read_only")
-          AccQual = KAQ_read_only;
-        else if (Q == "write_only")
-          AccQual = KAQ_write_only;
-        else if (Q == "read_write")
-          AccQual = KAQ_read_write;
-        else if (Q == "none")
-          AccQual = KAQ_none;
-        else
-          llvm_unreachable("invalid access qualifier");
+      void setAccessQualifier(StringRef Q) {
+        AccQual = StringSwitch<KernelArgAccessQualifer>(Q)
+          .Case("read_only",  KAQ_read_only)
+          .Case("write_only", KAQ_write_only)
+          .Case("read_write", KAQ_read_write)
+          .Default(KAQ_none);
       }
 
       // No translation is needed for address space.
@@ -919,27 +913,31 @@ void AMDGPUAsmPrinter::EmitOpenCLMetadata(const Function &F) {
       void setHasName(bool B) {
         HasName = B;
       }
-    } Flag{};
 
-    auto T = Arg.getType();
-    auto BaseTypeName = dyn_cast<MDString>(
-      F.getMetadata("kernel_arg_base_type")->getOperand(I))->getString();
-    auto TypeQual = dyn_cast<MDString>(F.getMetadata(
-      "kernel_arg_type_qual")->getOperand(I))->getString();
-    auto AccQual = dyn_cast<MDString>(F.getMetadata(
-      "kernel_arg_access_qual")->getOperand(I))->getString();
-    auto ArgNameMD = F.getMetadata("kernel_arg_name");
-    Flag.setTypeKind(T, BaseTypeName);
-    Flag.setDataType(T, BaseTypeName);
-    Flag.setTypeQualifier(TypeQual);
-    Flag.setAccessQualifier(AccQual);
-    Flag.setAddressQualifier(isa<PointerType>(T) ?
-      T->getPointerAddressSpace() : 0);
-    Flag.setHasName(ArgNameMD);
+      // Initialize Flag for the \p I-th argument of function \p F.
+      KernelArgFlag(const Function &F, unsigned I) {
+        auto T = F.getFunctionType()->getParamType(I);
+        auto BaseTypeName = cast<MDString>(
+          F.getMetadata("kernel_arg_base_type")->getOperand(I))->getString();
+        auto TypeQual = cast<MDString>(F.getMetadata(
+          "kernel_arg_type_qual")->getOperand(I))->getString();
+        auto AccQual = cast<MDString>(F.getMetadata(
+          "kernel_arg_access_qual")->getOperand(I))->getString();
+        setTypeKind(T, BaseTypeName);
+        setDataType(T, BaseTypeName);
+        setTypeQualifier(TypeQual);
+        setAccessQualifier(AccQual);
+        setAddressQualifier(isa<PointerType>(T) ?
+          T->getPointerAddressSpace() : 0);
+        setHasName(F.getMetadata("kernel_arg_name"));
+      }
+    } Flag(F, I);
+
     OutStreamer->EmitIntValue(Flag.getAsUnsignedInt(), 4);
 
+    auto T = Arg.getType();
     auto DL = F.getParent()->getDataLayout();
-    OutStreamer->EmitIntValue(DL.getTypeSizeInBits(T)/8, 4);
+    OutStreamer->EmitIntValue(DL.getTypeAllocSize(T), 4);
     OutStreamer->EmitIntValue(DL.getABITypeAlignment(T), 4);
 
     auto TypeName = dyn_cast<MDString>(F.getMetadata(
@@ -947,8 +945,8 @@ void AMDGPUAsmPrinter::EmitOpenCLMetadata(const Function &F) {
     OutStreamer->EmitIntValue(TypeName.size(), 4);
     OutStreamer->EmitBytes(TypeName);
 
-    if (ArgNameMD) {
-      auto ArgName = dyn_cast<MDString>(ArgNameMD->getOperand(
+    if (auto ArgNameMD = F.getMetadata("kernel_arg_name")) {
+      auto ArgName = cast<MDString>(ArgNameMD->getOperand(
         I))->getString();
       OutStreamer->EmitIntValue(ArgName.size(), 4);
       OutStreamer->EmitBytes(ArgName);
@@ -977,24 +975,24 @@ void AMDGPUAsmPrinter::EmitOpenCLMetadata(const Function &F) {
   OutStreamer->EmitIntValue(Flag.getAsUnsignedInt(), 4);
 
   if (RWGS) {
-    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+    OutStreamer->EmitIntValue(mdconst::extract<ConstantInt>(
       RWGS->getOperand(0))->getZExtValue(), 4);
-    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+    OutStreamer->EmitIntValue(mdconst::extract<ConstantInt>(
       RWGS->getOperand(1))->getZExtValue(), 4);
-    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+    OutStreamer->EmitIntValue(mdconst::extract<ConstantInt>(
       RWGS->getOperand(2))->getZExtValue(), 4);
   }
   if (WGSH) {
-    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+    OutStreamer->EmitIntValue(mdconst::extract<ConstantInt>(
       WGSH->getOperand(0))->getZExtValue(), 4);
-    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+    OutStreamer->EmitIntValue(mdconst::extract<ConstantInt>(
       WGSH->getOperand(1))->getZExtValue(), 4);
-    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+    OutStreamer->EmitIntValue(mdconst::extract<ConstantInt>(
       WGSH->getOperand(2))->getZExtValue(), 4);
   }
   if (VTH) {
     auto TypeName = getOCLTypeName(cast<ValueAsMetadata>(
-      VTH->getOperand(0))->getType(), mdconst::dyn_extract<ConstantInt>(
+      VTH->getOperand(0))->getType(), mdconst::extract<ConstantInt>(
       VTH->getOperand(1))->getZExtValue()).str();
     OutStreamer->EmitIntValue(TypeName.size(), 4);
     OutStreamer->EmitBytes(TypeName);
