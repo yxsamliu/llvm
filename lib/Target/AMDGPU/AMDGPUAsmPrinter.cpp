@@ -42,6 +42,10 @@
 
 using namespace llvm;
 
+namespace {
+  const char OPENCL_METADATA_SECTION[] = ".OpenCL.Metadata";
+}
+
 // TODO: This should get the default rounding mode from the kernel. We just set
 // the default here, but this could change if the OpenCL rounding mode pragmas
 // are used.
@@ -111,6 +115,7 @@ void AMDGPUAsmPrinter::EmitStartOfAsmFile(Module &M) {
   AMDGPU::IsaVersion ISA = AMDGPU::getIsaVersion(STI->getFeatureBits());
   TS->EmitDirectiveHSACodeObjectISA(ISA.Major, ISA.Minor, ISA.Stepping,
                                     "AMD", "AMDGPU");
+  EmitStartOfOpenCLMetadata(M);
 }
 
 void AMDGPUAsmPrinter::EmitFunctionBodyStart() {
@@ -142,37 +147,6 @@ void AMDGPUAsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
     return;
 
   AsmPrinter::EmitGlobalVariable(GV);
-}
-
-static Twine getOCLTypeName(Type *Ty, bool isSigned) {
-  if (VectorType* VecTy = dyn_cast<VectorType>(Ty)) {
-    Type* EleTy = VecTy->getElementType();
-    unsigned Size = VecTy->getVectorNumElements();
-    return getOCLTypeName(EleTy, isSigned) + Twine(Size);
-  }
-  if (Ty->isHalfTy())
-      return "half";
-  if (Ty->isFloatTy())
-    return "float";
-  if (Ty->isDoubleTy())
-    return "double";
-  if (!isSigned)
-    return Twine("u") + getOCLTypeName(Ty, true);
-  if (IntegerType* intTy = dyn_cast<IntegerType>(Ty)) {
-    switch (intTy->getIntegerBitWidth()) {
-    case 8:
-      return "char";
-    case 16:
-      return "short";
-    case 32:
-      return "int";
-    case 64:
-      return "long";
-    default:
-      llvm_unreachable("invalid integer type");
-    }
-  }
-  llvm_unreachable("invalid type");
 }
 
 bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
@@ -268,34 +242,7 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
-  // Output kernel attributes and argument info.
-  OutStreamer->SwitchSection(
-      Context.getELFSection(".Kernel.Attributes", ELF::SHT_PROGBITS, 0));
-  const Function *F = MF.getFunction();
-  if (MDNode *MD = F->getMetadata("reqd_work_group_size")) {
-    OutStreamer->emitRawComment(F->getName() + Twine(".RWGS=")
-      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(0))
-        ->getZExtValue()) + Twine(" ")
-      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(1))
-        ->getZExtValue()) + Twine(" ")
-      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(2))
-        ->getZExtValue()));
-  }
-  if (MDNode *MD = F->getMetadata("work_group_size_hint")) {
-    OutStreamer->emitRawComment(F->getName() + Twine(".WGSH=")
-      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(0))
-        ->getZExtValue()) + Twine(" ")
-      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(1))
-        ->getZExtValue()) + Twine(" ")
-      + Twine(mdconst::dyn_extract<ConstantInt>(MD->getOperand(2))
-        ->getZExtValue()));
-  }
-  if (MDNode *MD = F->getMetadata("vec_type_hint")) {
-    OutStreamer->emitRawComment(F->getName() + Twine(".VTH=")
-      + getOCLTypeName(cast<ValueAsMetadata>(MD->getOperand(0))->getType(),
-                       mdconst::dyn_extract<ConstantInt>(MD->getOperand(1))
-                         ->getZExtValue()));
-  }
+  EmitOpenCLMetadata(*MF.getFunction());
 
   return false;
 }
@@ -770,4 +717,286 @@ bool AMDGPUAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
   AMDGPUInstPrinter::printRegOperand(MI->getOperand(OpNo).getReg(), O,
                    *TM.getSubtargetImpl(*MF->getFunction())->getRegisterInfo());
   return false;
+}
+
+void AMDGPUAsmPrinter::EmitStartOfOpenCLMetadata(const Module &M) {
+    unsigned N = 0;
+    for (auto &I:M.functions())
+      if (I.getMetadata("kernel_arg_type"))
+        ++N;
+
+  OutStreamer->SwitchSection(getObjFileLowering().getContext()
+    .getELFSection(OPENCL_METADATA_SECTION, ELF::SHT_PROGBITS, 0));
+  OutStreamer->EmitIntValue(N, 4);
+}
+
+static Twine getOCLTypeName(Type *Ty, bool isSigned) {
+  if (VectorType* VecTy = dyn_cast<VectorType>(Ty)) {
+    Type* EleTy = VecTy->getElementType();
+    unsigned Size = VecTy->getVectorNumElements();
+    return getOCLTypeName(EleTy, isSigned) + Twine(Size);
+  }
+  if (Ty->isHalfTy())
+      return "half";
+  if (Ty->isFloatTy())
+    return "float";
+  if (Ty->isDoubleTy())
+    return "double";
+  if (!isSigned)
+    return Twine("u") + getOCLTypeName(Ty, true);
+  if (IntegerType* intTy = dyn_cast<IntegerType>(Ty)) {
+    switch (intTy->getIntegerBitWidth()) {
+    case 8:
+      return "char";
+    case 16:
+      return "short";
+    case 32:
+      return "int";
+    case 64:
+      return "long";
+    default:
+      llvm_unreachable("invalid integer type");
+    }
+  }
+  llvm_unreachable("invalid type");
+}
+
+void AMDGPUAsmPrinter::EmitOpenCLMetadata(const Function &F) {
+  if (!F.getMetadata("kernel_arg_type"))
+    return;
+
+  MCContext &Context = getObjFileLowering().getContext();
+  OutStreamer->SwitchSection(
+      Context.getELFSection(OPENCL_METADATA_SECTION, ELF::SHT_PROGBITS, 0));
+  OutStreamer->EmitIntValue(F.getFunctionType()->getNumParams(), 4);
+
+  for (auto &Arg:F.args()) {
+    unsigned I = Arg.getArgNo();
+
+    enum KernelArgType : char{
+      KAT_Pointer   = 0,
+      KAT_Value     = 1,
+      KAT_Image     = 2,
+      KAT_Sampler   = 3,
+      KAT_Queue     = 4,
+    };
+
+    enum KernelArgDataType : char{
+      KDT_struct  = 0,
+      KDT_i8      = 1,
+      KDT_u8      = 2,
+      KDT_i16     = 3,
+      KDT_u16     = 4,
+      KDT_f16     = 5,
+      KDT_i32     = 6,
+      KDT_u32     = 7,
+      KDT_f32     = 8,
+      KDT_i64     = 9,
+      KDT_u64     = 10,
+      KDT_f64     = 11,
+    };
+
+    enum KernelArgTypeQualifier : char {
+      KTQ_volatile = 1,
+      KTQ_restrict = 2,
+      KTQ_pipe     = 4,
+      KTQ_const    = 8,
+    };
+
+    enum KernelArgAccessQualifer : char {
+      KAQ_read_only   = 0,
+      KAQ_write_only  = 1,
+      KAQ_read_write  = 2,
+      KAQ_none        = 3,
+    };
+
+    struct KernelArgFlag {
+      char TypeKind : 2;
+      char DataType : 4;
+      char HasName  : 1;  // Whether the argument has name
+      char TypeQual : 4;  // Type qualifier
+      char AccQual  : 2;  // Access qualifier
+      char AddrQual : 2;  // Address qualifier
+
+      unsigned getAsUnsignedInt() {
+        return TypeKind
+          | DataType << 2
+          | HasName  << 6
+          | TypeQual << 7
+          | AccQual  << 11
+          | AddrQual << 13;
+      }
+
+      void setTypeKind(Type *T, StringRef TypeName) {
+        if (TypeName == "sampler_t")
+          TypeKind = KAT_Sampler;
+        else if (TypeName == "queue_t")
+          TypeKind = KAT_Queue;
+        else if (TypeName == "image1d_t" ||
+                 TypeName == "image1d_array_t" ||
+                 TypeName == "image1d_buffer_t" ||
+                 TypeName == "image2d_t" ||
+                 TypeName == "image2d_array_t" ||
+                 TypeName == "image2d_depth_t" ||
+                 TypeName == "image2d_array_depth_t" ||
+                 TypeName == "image2d_msaa_t" ||
+                 TypeName == "image2d_array_msaa_t" ||
+                 TypeName == "image2d_msaa_depth_t" ||
+                 TypeName == "image2d_array_msaa_depth_t" ||
+                 TypeName == "image3d_t")
+            TypeKind =KAT_Image;
+        else if (isa<PointerType>(T))
+          TypeKind = KAT_Pointer;
+        else
+          TypeKind = KAT_Value;
+      }
+
+      void setDataType(Type *Ty, StringRef TypeName) {
+        if (isa<StructType>(Ty))
+          DataType = KDT_struct;
+        else if (Ty->isHalfTy())
+          DataType = KDT_f16;
+        else if (Ty->isFloatTy())
+          DataType = KDT_f32;
+        else if (Ty->isDoubleTy())
+          DataType = KDT_f64;
+        else if (IntegerType* intTy = dyn_cast<IntegerType>(Ty)) {
+          bool Signed = !TypeName.startswith("u");
+          switch (intTy->getIntegerBitWidth()) {
+          case 8:
+            DataType = Signed ? KDT_i8 : KDT_u8;
+            break;
+          case 16:
+            DataType = Signed ? KDT_i16 : KDT_u16;
+            break;
+          case 32:
+            DataType = Signed ? KDT_i32 : KDT_u32;
+            break;
+          case 64:
+            DataType = Signed ? KDT_i64 : KDT_u64;
+            break;
+          default:
+            llvm_unreachable("invalid integer type");
+          }
+        }
+      }
+
+      void setTypeQualifier(StringRef Q) {
+        SmallVector<StringRef, 1> SplitQ;
+        Q.split(SplitQ, " ", -1, false/* drop empty entry*/);
+        for (auto &I:SplitQ) {
+          if (I == "volatile")
+            TypeQual |= KTQ_volatile;
+          else if (I == "restrict")
+            TypeQual |= KTQ_restrict;
+          else if (I == "const")
+            TypeQual |= KTQ_const;
+          else if (I == "pipe")
+            TypeQual |= KTQ_pipe;
+          else
+            llvm_unreachable("invalid type qualifier");
+        }
+      }
+
+      void setAccessQualifier (StringRef Q) {
+        if (Q == "read_only")
+          AccQual = KAQ_read_only;
+        else if (Q == "write_only")
+          AccQual = KAQ_write_only;
+        else if (Q == "read_write")
+          AccQual = KAQ_read_write;
+        else if (Q == "none")
+          AccQual = KAQ_none;
+        else
+          llvm_unreachable("invalid access qualifier");
+      }
+
+      // No translation is needed for address space.
+      void setAddressQualifier (unsigned A) {
+        AddrQual = A;
+      }
+
+      void setHasName(bool B) {
+        HasName = B;
+      }
+    } Flag{};
+
+    auto T = Arg.getType();
+    auto BaseTypeName = dyn_cast<MDString>(
+      F.getMetadata("kernel_arg_base_type")->getOperand(I))->getString();
+    auto TypeQual = dyn_cast<MDString>(F.getMetadata(
+      "kernel_arg_type_qual")->getOperand(I))->getString();
+    auto AccQual = dyn_cast<MDString>(F.getMetadata(
+      "kernel_arg_access_qual")->getOperand(I))->getString();
+    auto ArgNameMD = F.getMetadata("kernel_arg_name");
+    Flag.setTypeKind(T, BaseTypeName);
+    Flag.setDataType(T, BaseTypeName);
+    Flag.setTypeQualifier(TypeQual);
+    Flag.setAccessQualifier(AccQual);
+    Flag.setAddressQualifier(isa<PointerType>(T) ?
+      T->getPointerAddressSpace() : 0);
+    Flag.setHasName(ArgNameMD);
+    OutStreamer->EmitIntValue(Flag.getAsUnsignedInt(), 4);
+
+    auto DL = F.getParent()->getDataLayout();
+    OutStreamer->EmitIntValue(DL.getTypeSizeInBits(T)/8, 4);
+    OutStreamer->EmitIntValue(DL.getABITypeAlignment(T), 4);
+
+    auto TypeName = dyn_cast<MDString>(F.getMetadata(
+      "kernel_arg_type")->getOperand(I))->getString();
+    OutStreamer->EmitIntValue(TypeName.size(), 4);
+    OutStreamer->EmitBytes(TypeName);
+
+    if (ArgNameMD) {
+      auto ArgName = dyn_cast<MDString>(ArgNameMD->getOperand(
+        I))->getString();
+      OutStreamer->EmitIntValue(ArgName.size(), 4);
+      OutStreamer->EmitBytes(ArgName);
+    }
+  }
+
+  auto RWGS = F.getMetadata("reqd_work_group_size");
+  auto WGSH = F.getMetadata("work_group_size_hint");
+  auto VTH = F.getMetadata("vec_type_hint");
+  struct KernelFlag {
+    char HasReqdWorkGroupSize : 1; // Has reqd_work_group_size attribute
+    char HasWorkGroupSizeHint : 1; // Has work_group_size_hint attribute
+    char HasVecTypeHint       : 1; // Has vec_type_hint attribute
+    char IsDevEnqKernel       : 1; // Is device enqueue kernel
+    unsigned getAsUnsignedInt() {
+      return HasReqdWorkGroupSize
+        | HasWorkGroupSizeHint << 1
+        | HasVecTypeHint << 2
+        | IsDevEnqKernel << 3;
+    }
+  } Flag{};
+
+  Flag.HasReqdWorkGroupSize = RWGS != nullptr;
+  Flag.HasWorkGroupSizeHint = WGSH != nullptr;
+  Flag.HasVecTypeHint = VTH != nullptr;
+  OutStreamer->EmitIntValue(Flag.getAsUnsignedInt(), 4);
+
+  if (RWGS) {
+    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+      RWGS->getOperand(0))->getZExtValue(), 4);
+    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+      RWGS->getOperand(1))->getZExtValue(), 4);
+    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+      RWGS->getOperand(2))->getZExtValue(), 4);
+  }
+  if (WGSH) {
+    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+      WGSH->getOperand(0))->getZExtValue(), 4);
+    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+      WGSH->getOperand(1))->getZExtValue(), 4);
+    OutStreamer->EmitIntValue(mdconst::dyn_extract<ConstantInt>(
+      WGSH->getOperand(2))->getZExtValue(), 4);
+  }
+  if (VTH) {
+    auto TypeName = getOCLTypeName(cast<ValueAsMetadata>(
+      VTH->getOperand(0))->getType(), mdconst::dyn_extract<ConstantInt>(
+      VTH->getOperand(1))->getZExtValue()).str();
+    OutStreamer->EmitIntValue(TypeName.size(), 4);
+    OutStreamer->EmitBytes(TypeName);
+  }
 }
