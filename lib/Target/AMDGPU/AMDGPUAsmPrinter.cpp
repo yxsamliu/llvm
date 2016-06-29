@@ -811,27 +811,27 @@ void AMDGPUAsmPrinter::EmitOpenCLMetadata(const Function &F) {
     };
 
     struct KernelArgFlag {
-      char TypeKind : 2;
-      char DataType : 4;
-      char HasName  : 1;  // Whether the argument has name
-      char TypeQual : 4;  // Type qualifier
-      char AccQual  : 2;  // Access qualifier
-      char AddrQual : 2;  // Address qualifier
+      unsigned TypeKind : 3;
+      unsigned DataType : 4;
+      unsigned HasName  : 1;  // Whether the argument has name
+      unsigned TypeQual : 4;  // Type qualifier
+      unsigned AccQual  : 2;  // Access qualifier
+      unsigned AddrQual : 2;  // Address qualifier
 
       unsigned getAsUnsignedInt() {
         return TypeKind
-          | DataType << 2
-          | HasName  << 6
-          | TypeQual << 7
-          | AccQual  << 11
-          | AddrQual << 13;
+          | DataType << 3
+          | HasName  << 7
+          | TypeQual << 8
+          | AccQual  << 12
+          | AddrQual << 14;
       }
 
       void setTypeKind(Type *T, StringRef TypeName) {
         if (TypeName == "sampler_t")
-          TypeKind = KAT_Sampler;
+          TypeKind = (unsigned)KAT_Sampler;
         else if (TypeName == "queue_t")
-          TypeKind = KAT_Queue;
+          TypeKind = (unsigned)KAT_Queue;
         else if (TypeName == "image1d_t" ||
                  TypeName == "image1d_array_t" ||
                  TypeName == "image1d_buffer_t" ||
@@ -844,36 +844,36 @@ void AMDGPUAsmPrinter::EmitOpenCLMetadata(const Function &F) {
                  TypeName == "image2d_msaa_depth_t" ||
                  TypeName == "image2d_array_msaa_depth_t" ||
                  TypeName == "image3d_t")
-            TypeKind =KAT_Image;
+            TypeKind = (unsigned)KAT_Image;
         else if (isa<PointerType>(T))
-          TypeKind = KAT_Pointer;
+          TypeKind = (unsigned)KAT_Pointer;
         else
-          TypeKind = KAT_Value;
+          TypeKind = (unsigned)KAT_Value;
       }
 
       void setDataType(Type *Ty, StringRef TypeName) {
         if (isa<StructType>(Ty))
-          DataType = KDT_struct;
+          DataType = (unsigned)KDT_struct;
         else if (Ty->isHalfTy())
-          DataType = KDT_f16;
+          DataType = (unsigned)KDT_f16;
         else if (Ty->isFloatTy())
-          DataType = KDT_f32;
+          DataType = (unsigned)KDT_f32;
         else if (Ty->isDoubleTy())
-          DataType = KDT_f64;
+          DataType = (unsigned)KDT_f64;
         else if (IntegerType* intTy = dyn_cast<IntegerType>(Ty)) {
           bool Signed = !TypeName.startswith("u");
           switch (intTy->getIntegerBitWidth()) {
           case 8:
-            DataType = Signed ? KDT_i8 : KDT_u8;
+            DataType = (unsigned)(Signed ? KDT_i8 : KDT_u8);
             break;
           case 16:
-            DataType = Signed ? KDT_i16 : KDT_u16;
+            DataType = (unsigned)(Signed ? KDT_i16 : KDT_u16);
             break;
           case 32:
-            DataType = Signed ? KDT_i32 : KDT_u32;
+            DataType = (unsigned)(Signed ? KDT_i32 : KDT_u32);
             break;
           case 64:
-            DataType = Signed ? KDT_i64 : KDT_u64;
+            DataType = (unsigned)(Signed ? KDT_i64 : KDT_u64);
             break;
           default:
             llvm_unreachable("invalid integer type");
@@ -886,13 +886,13 @@ void AMDGPUAsmPrinter::EmitOpenCLMetadata(const Function &F) {
         Q.split(SplitQ, " ", -1, false/* drop empty entry*/);
         for (auto &I:SplitQ) {
           if (I == "volatile")
-            TypeQual |= KTQ_volatile;
+            TypeQual |= (unsigned)KTQ_volatile;
           else if (I == "restrict")
-            TypeQual |= KTQ_restrict;
+            TypeQual |= (unsigned)KTQ_restrict;
           else if (I == "const")
-            TypeQual |= KTQ_const;
+            TypeQual |= (unsigned)KTQ_const;
           else if (I == "pipe")
-            TypeQual |= KTQ_pipe;
+            TypeQual |= (unsigned)KTQ_pipe;
           else
             llvm_unreachable("invalid type qualifier");
         }
@@ -959,10 +959,10 @@ void AMDGPUAsmPrinter::EmitOpenCLMetadata(const Function &F) {
   auto WGSH = F.getMetadata("work_group_size_hint");
   auto VTH = F.getMetadata("vec_type_hint");
   struct KernelFlag {
-    char HasReqdWorkGroupSize : 1; // Has reqd_work_group_size attribute
-    char HasWorkGroupSizeHint : 1; // Has work_group_size_hint attribute
-    char HasVecTypeHint       : 1; // Has vec_type_hint attribute
-    char IsDevEnqKernel       : 1; // Is device enqueue kernel
+    unsigned HasReqdWorkGroupSize : 1; // Has reqd_work_group_size attribute
+    unsigned HasWorkGroupSizeHint : 1; // Has work_group_size_hint attribute
+    unsigned HasVecTypeHint       : 1; // Has vec_type_hint attribute
+    unsigned IsDevEnqKernel       : 1; // Is device enqueue kernel
     unsigned getAsUnsignedInt() {
       return HasReqdWorkGroupSize
         | HasWorkGroupSizeHint << 1
