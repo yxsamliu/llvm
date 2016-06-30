@@ -17,6 +17,7 @@
 //
 
 #include "AMDGPUAsmPrinter.h"
+#include "AMDGPUOpenCLMetadata.h"
 #include "MCTargetDesc/AMDGPUTargetStreamer.h"
 #include "InstPrinter/AMDGPUInstPrinter.h"
 #include "Utils/AMDGPUBaseInfo.h"
@@ -40,6 +41,7 @@
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
 
+using namespace ::AMDGPU;
 using namespace llvm;
 
 namespace {
@@ -775,65 +777,12 @@ void AMDGPUAsmPrinter::emitOpenCLMetadata(const Function &F) {
   for (auto &Arg:F.args()) {
     unsigned I = Arg.getArgNo();
 
-    enum KernelArgType : char {
-      KAT_Pointer   = 0,
-      KAT_Value     = 1,
-      KAT_Image     = 2,
-      KAT_Sampler   = 3,
-      KAT_Queue     = 4,
-    };
-
-    enum KernelArgDataType : char {
-      KDT_struct  = 0,
-      KDT_i8      = 1,
-      KDT_u8      = 2,
-      KDT_i16     = 3,
-      KDT_u16     = 4,
-      KDT_f16     = 5,
-      KDT_i32     = 6,
-      KDT_u32     = 7,
-      KDT_f32     = 8,
-      KDT_i64     = 9,
-      KDT_u64     = 10,
-      KDT_f64     = 11,
-    };
-
-    enum KernelArgTypeQualifier : char {
-      KTQ_volatile = 1,
-      KTQ_restrict = 2,
-      KTQ_pipe     = 4,
-      KTQ_const    = 8,
-    };
-
-    enum KernelArgAccessQualifer : char {
-      KAQ_read_only   = 0,
-      KAQ_write_only  = 1,
-      KAQ_read_write  = 2,
-      KAQ_none        = 3,
-    };
-
-    struct KernelArgFlag {
-      unsigned TypeKind : 3;
-      unsigned DataType : 4;
-      unsigned HasName  : 1;  // Whether the argument has name
-      unsigned TypeQual : 4;  // Type qualifier
-      unsigned AccQual  : 2;  // Access qualifier
-      unsigned AddrQual : 2;  // Address qualifier
-
-      unsigned getAsUnsignedInt() {
-        return TypeKind
-          | DataType << 3
-          | HasName  << 7
-          | TypeQual << 8
-          | AccQual  << 12
-          | AddrQual << 14;
-      }
-
+    struct KernelArgFlag : public KernelArg::Flag {
       void setTypeKind(Type *T, StringRef TypeName) {
         if (TypeName == "sampler_t")
-          TypeKind = (unsigned)KAT_Sampler;
+          TypeKind = (unsigned)KernelArg::Sampler;
         else if (TypeName == "queue_t")
-          TypeKind = (unsigned)KAT_Queue;
+          TypeKind = (unsigned)KernelArg::Queue;
         else if (TypeName == "image1d_t" ||
                  TypeName == "image1d_array_t" ||
                  TypeName == "image1d_buffer_t" ||
@@ -846,36 +795,36 @@ void AMDGPUAsmPrinter::emitOpenCLMetadata(const Function &F) {
                  TypeName == "image2d_msaa_depth_t" ||
                  TypeName == "image2d_array_msaa_depth_t" ||
                  TypeName == "image3d_t")
-            TypeKind = (unsigned)KAT_Image;
+            TypeKind = (unsigned)KernelArg::Image;
         else if (isa<PointerType>(T))
-          TypeKind = (unsigned)KAT_Pointer;
+          TypeKind = (unsigned)KernelArg::Pointer;
         else
-          TypeKind = (unsigned)KAT_Value;
+          TypeKind = (unsigned)KernelArg::Value;
       }
 
       void setDataType(Type *Ty, StringRef TypeName) {
         if (isa<StructType>(Ty))
-          DataType = (unsigned)KDT_struct;
+          DataType = (unsigned)KernelArg::Struct;
         else if (Ty->isHalfTy())
-          DataType = (unsigned)KDT_f16;
+          DataType = (unsigned)KernelArg::F16;
         else if (Ty->isFloatTy())
-          DataType = (unsigned)KDT_f32;
+          DataType = (unsigned)KernelArg::F32;
         else if (Ty->isDoubleTy())
-          DataType = (unsigned)KDT_f64;
+          DataType = (unsigned)KernelArg::F64;
         else if (IntegerType* intTy = dyn_cast<IntegerType>(Ty)) {
           bool Signed = !TypeName.startswith("u");
           switch (intTy->getIntegerBitWidth()) {
           case 8:
-            DataType = (unsigned)(Signed ? KDT_i8 : KDT_u8);
+            DataType = (unsigned)(Signed ? KernelArg::I8 : KernelArg::U8);
             break;
           case 16:
-            DataType = (unsigned)(Signed ? KDT_i16 : KDT_u16);
+            DataType = (unsigned)(Signed ? KernelArg::I16 : KernelArg::U16);
             break;
           case 32:
-            DataType = (unsigned)(Signed ? KDT_i32 : KDT_u32);
+            DataType = (unsigned)(Signed ? KernelArg::I32 : KernelArg::U32);
             break;
           case 64:
-            DataType = (unsigned)(Signed ? KDT_i64 : KDT_u64);
+            DataType = (unsigned)(Signed ? KernelArg::I64 : KernelArg::U64);
             break;
           default:
             llvm_unreachable("invalid integer type");
@@ -889,20 +838,20 @@ void AMDGPUAsmPrinter::emitOpenCLMetadata(const Function &F) {
         TypeQual = 0;
         for (auto &I:SplitQ) {
           TypeQual |= StringSwitch<unsigned>(I)
-            .Case("volatile", KTQ_volatile)
-            .Case("restrict", KTQ_restrict)
-            .Case("const",    KTQ_const)
-            .Case("pipe",     KTQ_pipe)
+            .Case("volatile", KernelArg::Volatile)
+            .Case("restrict", KernelArg::Restrict)
+            .Case("const",    KernelArg::Const)
+            .Case("pipe",     KernelArg::Pipe)
             .Default(0);
         }
       }
 
       void setAccessQualifier(StringRef Q) {
-        AccQual = StringSwitch<KernelArgAccessQualifer>(Q)
-          .Case("read_only",  KAQ_read_only)
-          .Case("write_only", KAQ_write_only)
-          .Case("read_write", KAQ_read_write)
-          .Default(KAQ_none);
+        AccQual = StringSwitch<KernelArg::AccessQualifer>(Q)
+          .Case("read_only",  KernelArg::ReadOnly)
+          .Case("write_only", KernelArg::WriteOnly)
+          .Case("read_write", KernelArg::ReadWrite)
+          .Default(KernelArg::None);
       }
 
       // No translation is needed for address space.
@@ -956,18 +905,7 @@ void AMDGPUAsmPrinter::emitOpenCLMetadata(const Function &F) {
   auto RWGS = F.getMetadata("reqd_work_group_size");
   auto WGSH = F.getMetadata("work_group_size_hint");
   auto VTH = F.getMetadata("vec_type_hint");
-  struct KernelFlag {
-    unsigned HasReqdWorkGroupSize : 1; // Has reqd_work_group_size attribute
-    unsigned HasWorkGroupSizeHint : 1; // Has work_group_size_hint attribute
-    unsigned HasVecTypeHint       : 1; // Has vec_type_hint attribute
-    unsigned IsDevEnqKernel       : 1; // Is device enqueue kernel
-    unsigned getAsUnsignedInt() {
-      return HasReqdWorkGroupSize
-        | HasWorkGroupSizeHint << 1
-        | HasVecTypeHint << 2
-        | IsDevEnqKernel << 3;
-    }
-  } Flag{};
+  ::AMDGPU::Kernel::Flag Flag{};
 
   Flag.HasReqdWorkGroupSize = RWGS != nullptr;
   Flag.HasWorkGroupSizeHint = WGSH != nullptr;

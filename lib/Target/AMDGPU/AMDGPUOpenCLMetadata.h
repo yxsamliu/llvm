@@ -9,14 +9,7 @@
 //
 /// \file
 ///
-/// Enums and structure types used by OpenCL metadata. This file defines
-/// a common in-memoery representation of the metadata shared between
-/// the compiler and OpenCL runtime.
-///
-/// Note: The common in-memory representation is not a bit-to-bit mapping to
-/// the data in the .OpenCL.Metadata ELF section. Due to the different
-/// way of streaming it is inconvenient and unnecessary to define a bit-to-bit
-/// mapping to the data in the ELF section.
+/// Enums and structure types used by OpenCL metadata.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -66,7 +59,7 @@ namespace AMDGPU {
       None       = 3,
     };
 
-    struct ArgFlag {
+    struct Flag {
       unsigned TypeKind : 3;
       unsigned DataType : 4;
       unsigned HasName  : 1;  // Whether the argument has name
@@ -82,28 +75,11 @@ namespace AMDGPU {
           | AccQual  << 12
           | AddrQual << 14;
       }
-
-      void setWithUnsignedInt(unsigned V) {
-        TypeKind = V & 0x7;
-        DataType = (V >> 3) & 0xF;
-        HasName  = (V >> 7) & 0x1;
-        TypeQual = (V >> 8) & 0xF;
-        AccQual  = (V >> 12) & 0x3;
-        AddrQual = (V >> 14) & 0x3;
-      }
-    };
-
-    struct ArgMetadata {
-      ArgFlag Flag;
-      unsigned Size;
-      unsigned Align;
-      std::string TypeName;
-      std::string Name;
     };
   } // namespace KernelArg
 
   namespace Kernel {
-    struct KernelFlag {
+    struct Flag {
       unsigned HasReqdWorkGroupSize : 1; // Has reqd_work_group_size attribute
       unsigned HasWorkGroupSizeHint : 1; // Has work_group_size_hint attribute
       unsigned HasVecTypeHint       : 1; // Has vec_type_hint attribute
@@ -114,16 +90,6 @@ namespace AMDGPU {
           | HasVecTypeHint << 2
           | IsDevEnqKernel << 3;
       }
-    };
-
-    struct KernelMetadata {
-      struct Vec3 { unsigned X, Y, Z; };
-      std::vector<KernelArg::ArgMetadata> ArgMD;
-      KernelFlag Flag;
-      Vec3 ReqdWorkGroupSize;
-      Vec3 WorkGroupSizeHint;
-      std::string VecTypeHint;
-      unsigned KernelIndex;
     };
   } // namespace Kernel
 }
