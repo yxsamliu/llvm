@@ -807,8 +807,10 @@ void AMDGPUAsmPrinter::emitOpenCLMetadata(const Function &F) {
       }
 
       void setDataType(Type *Ty, StringRef TypeName) {
-        if (isa<StructType>(Ty))
-          DataType = (unsigned)KernelArg::Struct;
+        if (isa<VectorType>(Ty))
+          setDataType(Ty->getVectorElementType(), TypeName);
+        else if (isa<PointerType>(Ty))
+          setDataType(Ty->getPointerElementType(), TypeName);
         else if (Ty->isHalfTy())
           DataType = (unsigned)KernelArg::F16;
         else if (Ty->isFloatTy())
@@ -831,9 +833,12 @@ void AMDGPUAsmPrinter::emitOpenCLMetadata(const Function &F) {
             DataType = (unsigned)(Signed ? KernelArg::I64 : KernelArg::U64);
             break;
           default:
-            llvm_unreachable("invalid integer type");
+            // Runtime does not recognize other integer types. Report as
+            // struct type.
+            DataType = (unsigned)KernelArg::Struct;
           }
-        }
+        } else
+          DataType = (unsigned)KernelArg::Struct;
       }
 
       void setTypeQualifier(StringRef Q) {
