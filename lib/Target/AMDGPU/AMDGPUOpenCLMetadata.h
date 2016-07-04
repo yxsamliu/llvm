@@ -23,8 +23,8 @@ namespace AMDGPU {
 
   namespace KernelArg {
     enum Type : char {
-      Pointer   = 0,
-      Value     = 1,
+      Value     = 0,
+      Pointer   = 1,
       Image     = 2,
       Sampler   = 3,
       Queue     = 4,
@@ -46,17 +46,17 @@ namespace AMDGPU {
     };
 
     enum TypeQualifier : char {
-      Volatile = 1,
+      Const    = 1,
       Restrict = 2,
-      Pipe     = 4,
-      Const    = 8,
+      Volatile = 4,
+      Pipe     = 8,
     };
 
     enum AccessQualifer : char {
-      ReadOnly   = 0,
-      WriteOnly  = 1,
-      ReadWrite  = 2,
-      None       = 3,
+      None       = 0,
+      ReadOnly   = 1,
+      WriteOnly  = 2,
+      ReadWrite  = 3,
     };
 
     struct Flag {
@@ -66,6 +66,15 @@ namespace AMDGPU {
       unsigned TypeQual : 4;  // Type qualifier
       unsigned AccQual  : 2;  // Access qualifier
       unsigned AddrQual : 2;  // Address qualifier
+
+      Flag():
+        TypeKind(0),
+        DataType(0),
+        HasName(0),
+        TypeQual(0),
+        AccQual(0),
+        AddrQual(0)
+      {}
 
       unsigned getAsUnsignedInt() {
         return TypeKind
@@ -84,6 +93,14 @@ namespace AMDGPU {
       unsigned HasWorkGroupSizeHint : 1; // Has work_group_size_hint attribute
       unsigned HasVecTypeHint       : 1; // Has vec_type_hint attribute
       unsigned IsDevEnqKernel       : 1; // Is device enqueue kernel
+
+      Flag():
+        HasReqdWorkGroupSize(0),
+        HasWorkGroupSizeHint(0),
+        HasVecTypeHint(0),
+        IsDevEnqKernel(0)
+      {}
+
       unsigned getAsUnsignedInt() {
         return HasReqdWorkGroupSize
           | HasWorkGroupSizeHint << 1
