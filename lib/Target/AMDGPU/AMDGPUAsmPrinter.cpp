@@ -46,6 +46,8 @@ using namespace llvm;
 
 namespace {
   const char OpenCLMetadataSectionName[] = ".OpenCL.Metadata";
+  const unsigned char OpenCLMetadataVersion = 1;
+  const unsigned char OpenCLMetadataRevision = 0;
 }
 
 // TODO: This should get the default rounding mode from the kernel. We just set
@@ -729,6 +731,8 @@ void AMDGPUAsmPrinter::emitStartOfOpenCLMetadata(const Module &M) {
 
   OutStreamer->SwitchSection(getObjFileLowering().getContext()
     .getELFSection(OpenCLMetadataSectionName, ELF::SHT_PROGBITS, 0));
+  OutStreamer->EmitIntValue(OpenCLMetadataVersion << 8 |
+                            OpenCLMetadataRevision, 2);
   OutStreamer->EmitIntValue(N, 4);
 }
 
