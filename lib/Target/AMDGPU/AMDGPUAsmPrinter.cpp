@@ -800,6 +800,8 @@ void AMDGPUAsmPrinter::emitOpenCLMetadata(const Function &F) {
   MCContext &Context = getObjFileLowering().getContext();
   OutStreamer->SwitchSection(
       Context.getELFSection(OpenCLMetadataSectionName, ELF::SHT_PROGBITS, 0));
+  OutStreamer->EmitIntValue(F.getName().size(), 4);
+  OutStreamer->EmitBytes(F.getName());
   OutStreamer->EmitIntValue(F.getFunctionType()->getNumParams(), 4);
 
   for (auto &Arg:F.args()) {
