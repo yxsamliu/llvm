@@ -127,9 +127,9 @@ public:
                        unsigned AsmVariant, const char *ExtraCode,
                        raw_ostream &O) override;
 
-  void emitStartOfOpenCLMetadata(const Module &M);
+  void emitStartOfRuntimeMetadata(const Module &M);
 
-  void emitOpenCLMetadata(const Function &F);
+  void emitRuntimeMetadata(const Function &F);
 
 protected:
   std::vector<std::string> DisasmLines, HexLines;

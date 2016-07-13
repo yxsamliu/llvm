@@ -7,12 +7,12 @@
 %opencl.queue_t = type opaque
 %opencl.pipe_t = type opaque
 
-; CHECK: .section        .OpenCL.Metadata
-; CHECK-NEXT: .short	256
-; CHECK-NEXT: .long   19
+; CHECK: .section        .AMDGPU.runtime_metadata
+; CHECK-NEXT: .byte 1
+; CHECK-NEXT: .short  256
 
 ; CHECK-LABEL:{{^}}test_char:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	9
 ; CHECK-NEXT: .ascii	"test_char"
 ; CHECK-NEXT: .long	1
@@ -28,7 +28,7 @@ define amdgpu_kernel void @test_char(i8 %a) !kernel_arg_addr_space !1 !kernel_ar
 }
 
 ; CHECK-LABEL:{{^}}test_ushort2:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	12
 ; CHECK-NEXT: .ascii	"test_ushort2"
 ; CHECK-NEXT: .long	1
@@ -44,7 +44,7 @@ define amdgpu_kernel void @test_ushort2(<2 x i16> %a) !kernel_arg_addr_space !1 
 }
 
 ; CHECK-LABEL:{{^}}test_int3:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	9
 ; CHECK-NEXT: .ascii	"test_int3"
 ; CHECK-NEXT: .long	1
@@ -60,7 +60,7 @@ define amdgpu_kernel void @test_int3(<3 x i32> %a) !kernel_arg_addr_space !1 !ke
 }
 
 ; CHECK-LABEL:{{^}}test_ulong4:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	11
 ; CHECK-NEXT: .ascii	"test_ulong4"
 ; CHECK-NEXT: .long	1
@@ -76,7 +76,7 @@ define amdgpu_kernel void @test_ulong4(<4 x i64> %a) !kernel_arg_addr_space !1 !
 }
 
 ; CHECK-LABEL:{{^}}test_half8:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	10
 ; CHECK-NEXT: .ascii	"test_half8"
 ; CHECK-NEXT: .long	1
@@ -92,7 +92,7 @@ define amdgpu_kernel void @test_half8(<8 x half> %a) !kernel_arg_addr_space !1 !
 }
 
 ; CHECK-LABEL:{{^}}test_float16:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	12
 ; CHECK-NEXT: .ascii	"test_float16"
 ; CHECK-NEXT: .long	1
@@ -108,7 +108,7 @@ define amdgpu_kernel void @test_float16(<16 x float> %a) !kernel_arg_addr_space 
 }
 
 ; CHECK-LABEL:{{^}}test_double16:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	13
 ; CHECK-NEXT: .ascii	"test_double16"
 ; CHECK-NEXT: .long	1
@@ -124,7 +124,7 @@ define amdgpu_kernel void @test_double16(<16 x double> %a) !kernel_arg_addr_spac
 }
 
 ; CHECK-LABEL:{{^}}test_pointer:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	12
 ; CHECK-NEXT: .ascii	"test_pointer"
 ; CHECK-NEXT: .long	1
@@ -140,7 +140,7 @@ define amdgpu_kernel void @test_pointer(i32 addrspace(1)* %a) !kernel_arg_addr_s
 }
 
 ; CHECK-LABEL:{{^}}test_image:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	10
 ; CHECK-NEXT: .ascii	"test_image"
 ; CHECK-NEXT: .long	1
@@ -156,7 +156,7 @@ define amdgpu_kernel void @test_image(%opencl.image2d_t addrspace(1)* %a) !kerne
 }
 
 ; CHECK-LABEL:{{^}}test_sampler:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	12
 ; CHECK-NEXT: .ascii	"test_sampler"
 ; CHECK-NEXT: .long	1
@@ -172,7 +172,7 @@ define amdgpu_kernel void @test_sampler(i32 %a) !kernel_arg_addr_space !1 !kerne
 }
 
 ; CHECK-LABEL:{{^}}test_queue:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	10
 ; CHECK-NEXT: .ascii	"test_queue"
 ; CHECK-NEXT: .long	1
@@ -188,7 +188,7 @@ define amdgpu_kernel void @test_queue(%opencl.queue_t addrspace(1)* %a) !kernel_
 }
 
 ; CHECK-LABEL:{{^}}test_struct:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	11
 ; CHECK-NEXT: .ascii	"test_struct"
 ; CHECK-NEXT: .long	1
@@ -204,7 +204,7 @@ define amdgpu_kernel void @test_struct(%struct.A* byval %a) !kernel_arg_addr_spa
 }
 
 ; CHECK-LABEL:{{^}}test_i128:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	9
 ; CHECK-NEXT: .ascii	"test_i128"
 ; CHECK-NEXT: .long	1
@@ -220,7 +220,7 @@ define amdgpu_kernel void @test_i128(i128 %a) !kernel_arg_addr_space !1 !kernel_
 }
 
 ; CHECK-LABEL:{{^}}test_multi_arg:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	14
 ; CHECK-NEXT: .ascii	"test_multi_arg"
 ; CHECK-NEXT: .long	3
@@ -246,7 +246,7 @@ define amdgpu_kernel void @test_multi_arg(i32 %a, <2 x i16> %b, <3 x i8> %c) !ke
 }
 
 ; CHECK-LABEL:{{^}}test_addr_space:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	15
 ; CHECK-NEXT: .ascii	"test_addr_space"
 ; CHECK-NEXT: .long	3
@@ -272,7 +272,7 @@ define amdgpu_kernel void @test_addr_space(i32 addrspace(1)* %g, i32 addrspace(2
 }
 
 ; CHECK-LABEL:{{^}}test_type_qual:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	14
 ; CHECK-NEXT: .ascii	"test_type_qual"
 ; CHECK-NEXT: .long	3
@@ -298,7 +298,7 @@ define amdgpu_kernel void @test_type_qual(i32 addrspace(1)* %a, i32 addrspace(1)
 }
 
 ; CHECK-LABEL:{{^}}test_access_qual:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	16
 ; CHECK-NEXT: .ascii	"test_access_qual"
 ; CHECK-NEXT: .long	3
@@ -324,7 +324,7 @@ define amdgpu_kernel void @test_access_qual(%opencl.image1d_t addrspace(1)* %ro,
 }
 
 ; CHECK-LABEL:{{^}}test_reqd_wgs_vec_type_hint:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	27
 ; CHECK-NEXT: .ascii	"test_reqd_wgs_vec_type_hint"
 ; CHECK-NEXT: .long   1
@@ -345,7 +345,7 @@ define amdgpu_kernel void @test_reqd_wgs_vec_type_hint(i32 %a) !kernel_arg_addr_
 }
 
 ; CHECK-LABEL:{{^}}test_wgs_hint_vec_type_hint:
-; CHECK: .section        .OpenCL.Metadata
+; CHECK: .section        .AMDGPU.runtime_metadata
 ; CHECK-NEXT: .long	27
 ; CHECK-NEXT: .ascii	"test_wgs_hint_vec_type_hint"
 ; CHECK-NEXT: .long   1
