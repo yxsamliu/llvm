@@ -680,8 +680,8 @@ define amdgpu_kernel void @test_reqd_wgs_vec_type_hint(i32 %a) !kernel_arg_addr_
 ; CHECK-NEXT: .long	16
 ; CHECK-NEXT: .long	32
 ; CHECK-NEXT: .byte	23
-; CHECK-NEXT: .long	1
-; CHECK-NEXT: .byte	52
+; CHECK-NEXT: .long	5
+; CHECK-NEXT: .ascii  "uint4"
 ; CHECK-NEXT: .byte	5
 
 
