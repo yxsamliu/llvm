@@ -85,7 +85,7 @@ namespace RuntimeMD {
     KeyMaxWavesPerSIMD          = 28, // Maximum number of waves per SIMD
     KeyFlatWorkGroupSizeLimits  = 29, // Flat work group size limits
     KeyMaxWorkGroupSize         = 30, // Maximum work group size
-    KeyNoPartialWorkGroups      = 31, // No partial work group
+    KeyNoPartialWorkGroups      = 31, // No partial work groups
   };
 
   enum Language {
