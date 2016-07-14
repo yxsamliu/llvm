@@ -85,7 +85,7 @@ namespace RuntimeMD {
     KeyMaxWavesPerSIMD          = 28, // Maximum number of waves per SIMD
     KeyFlatWorkGroupSizeLimits  = 29, // Flat work group size limits
     KeyMaxWorkGroupSize         = 30, // Maximum work group size
-    KeyNoPartialWorkGroup       = 31, // No partial work group
+    KeyNoPartialWorkGroups      = 31, // No partial work group
   };
 
   enum Language {
@@ -112,7 +112,7 @@ namespace RuntimeMD {
       Queue     = 4,
     };
 
-    enum DataType : char {
+    enum ValueType : short {
       Struct  = 0,
       I8      = 1,
       U8      = 2,
@@ -125,20 +125,6 @@ namespace RuntimeMD {
       I64     = 9,
       U64     = 10,
       F64     = 11,
-    };
-
-    enum TypeQualifier : char {
-      Const    = 1,
-      Restrict = 2,
-      Volatile = 4,
-      Pipe     = 8,
-    };
-
-    enum AccessQualifer : char {
-      None       = 0,
-      ReadOnly   = 1,
-      WriteOnly  = 2,
-      ReadWrite  = 3,
     };
   } // namespace KernelArg
 } // namespace RuntimeMD

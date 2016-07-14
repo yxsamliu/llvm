@@ -813,7 +813,7 @@ static Twine getOCLTypeName(Type *Ty, bool isSigned) {
   }
 }
 
-static RuntimeMD::KernelArg::DataType getRuntimeMDValueType(
+static RuntimeMD::KernelArg::ValueType getRuntimeMDValueType(
          Type *Ty, StringRef TypeName) {
   if (isa<VectorType>(Ty))
     return getRuntimeMDValueType(Ty->getVectorElementType(), TypeName);
