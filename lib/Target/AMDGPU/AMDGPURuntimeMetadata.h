@@ -126,6 +126,13 @@ namespace RuntimeMD {
       U64     = 10,
       F64     = 11,
     };
+
+    enum AccessQualifer : char {
+      None       = 0,
+      ReadOnly   = 1,
+      WriteOnly  = 2,
+      ReadWrite  = 3,
+    };
   } // namespace KernelArg
 } // namespace RuntimeMD
 } // namespace AMDGPU
