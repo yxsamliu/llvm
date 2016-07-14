@@ -38,9 +38,6 @@
 #ifndef LLVM_LIB_TARGET_AMDGPU_AMDGPURUNTIMEMETADATA_H
 #define LLVM_LIB_TARGET_AMDGPU_AMDGPURUNTIMEMETADATA_H
 
-#include <string>
-#include <vector>
-
 namespace AMDGPU {
 
 namespace RuntimeMD {
@@ -88,14 +85,14 @@ namespace RuntimeMD {
     KeyNoPartialWorkGroups      = 31, // No partial work groups
   };
 
-  enum Language {
+  enum Language : char {
     OpenCL_C      = 0,
     HCC           = 1,
     OpenMP        = 2,
     OpenCL_CPP    = 3,
   };
 
-  enum LanguageVersion {
+  enum LanguageVersion : short {
     V100          = 100,
     V110          = 110,
     V120          = 120,
@@ -137,4 +134,4 @@ namespace RuntimeMD {
 } // namespace RuntimeMD
 } // namespace AMDGPU
 
-#endif // LLVM_LIB_TARGET_AMDGPU_AMDGPUOPENCLMETADATA_H
+#endif // LLVM_LIB_TARGET_AMDGPU_AMDGPURUNTIMEMETADATA_H
