@@ -16,6 +16,11 @@
 ; CHECK-NEXT: .byte	0
 ; CHECK-NEXT: .byte	3
 ; CHECK-NEXT: .short	200
+; CHECK-NEXT: .byte 32
+; CHECK-NEXT: .long 12
+; CHECK-NEXT: .ascii  "1:1:4:%d\5Cn"
+; CHECK-NEXT: .long 12
+; CHECK-NEXT: .ascii  "1:1:4:%d\5Cn"
 
 ; CHECK-LABEL:{{^}}test_char:
 ; CHECK: .section        .AMDGPU.runtime_metadata
@@ -1018,6 +1023,8 @@ define amdgpu_kernel void @test_arg_unknown_builtin_type(%opencl.clk_event_t add
   ret void
 }
 
+!llvm.printf.fmts = !{!100, !101}
+
 !1 = !{i32 0}
 !2 = !{!"none"}
 !3 = !{!"int"}
@@ -1063,3 +1070,5 @@ define amdgpu_kernel void @test_arg_unknown_builtin_type(%opencl.clk_event_t add
 !84 = !{!"clk_event_t"}
 !opencl.ocl.version = !{!90}
 !90 = !{i32 2, i32 0}
+!100 = !{!"1:1:4:%d\5Cn"}
+!101 = !{!"2:1:8:%g\5Cn"}

@@ -799,6 +799,14 @@ void AMDGPUAsmPrinter::emitStartOfRuntimeMetadata(const Module &M) {
       }
     }
   }
+
+  if (auto MD = M.getNamedMetadata("llvm.printf.fmts")) {
+    for (auto I = 0; I < MD->getNumOperands(); ++I) {
+      emitRuntimeMDStringValue(*OutStreamer, RuntimeMD::KeyPrintfInfo,
+                               cast<MDString>(MD->getOperand(I))->getString());
+    }
+  }
+
 }
 
 static std::string getOCLTypeName(Type *Ty, bool Signed) {
