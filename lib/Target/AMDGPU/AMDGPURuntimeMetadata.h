@@ -84,6 +84,7 @@ namespace RuntimeMD {
     KeyFlatWorkGroupSizeLimits  = 29, // Flat work group size limits
     KeyMaxWorkGroupSize         = 30, // Maximum work group size
     KeyNoPartialWorkGroups      = 31, // No partial work groups
+    KeyPrintfInfo               = 32, // Prinf function call information
   };
 
   enum Language : uint8_t {
