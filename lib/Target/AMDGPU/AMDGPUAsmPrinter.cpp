@@ -32,6 +32,7 @@
 #include "SIRegisterInfo.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/IR/DiagnosticInfo.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCStreamer.h"
@@ -881,9 +882,9 @@ static RuntimeMD::KernelArg::ValueType getRuntimeMDValueType(
 }
 
 static void emitRuntimeMetadataForKernelArg(const DataLayout &DL,
-    std::unique_ptr<MCStreamer> &OutStreamer, Type *T, StringRef TypeName,
-    StringRef BaseTypeName, StringRef ArgName, StringRef TypeQual,
-    StringRef AccQual) {
+    std::unique_ptr<MCStreamer> &OutStreamer, Type *T, bool IsHidden,
+    StringRef TypeName = "", StringRef BaseTypeName = "",
+    StringRef ArgName = "", StringRef TypeQual = "", StringRef AccQual = "") {
   // Emit KeyArgBegin.
   OutStreamer->EmitIntValue(RuntimeMD::KeyArgBegin, 1);
 
@@ -894,7 +895,8 @@ static void emitRuntimeMetadataForKernelArg(const DataLayout &DL,
                         DL.getABITypeAlignment(T), 4);
 
   // Emit KeyArgTypeName.
-  emitRuntimeMDStringValue(*OutStreamer, RuntimeMD::KeyArgTypeName, TypeName);
+  if (!TypeName.empty())
+    emitRuntimeMDStringValue(*OutStreamer, RuntimeMD::KeyArgTypeName, TypeName);
 
   // Emit KeyArgName.
   if (!ArgName.empty())
@@ -934,12 +936,14 @@ static void emitRuntimeMetadataForKernelArg(const DataLayout &DL,
                         getRuntimeMDValueType(T, BaseTypeName), 2);
 
   // Emit KeyArgAccQual.
-  auto AQ = StringSwitch<RuntimeMD::KernelArg::AccessQualifer>(AccQual)
-    .Case("read_only",  RuntimeMD::KernelArg::ReadOnly)
-    .Case("write_only", RuntimeMD::KernelArg::WriteOnly)
-    .Case("read_write", RuntimeMD::KernelArg::ReadWrite)
-    .Default(RuntimeMD::KernelArg::None);
-  emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgAccQual, AQ, 1);
+  if (!AccQual.empty()) {
+    auto AQ = StringSwitch<RuntimeMD::KernelArg::AccessQualifer>(AccQual)
+      .Case("read_only",  RuntimeMD::KernelArg::ReadOnly)
+      .Case("write_only", RuntimeMD::KernelArg::WriteOnly)
+      .Case("read_write", RuntimeMD::KernelArg::ReadWrite)
+      .Default(RuntimeMD::KernelArg::None);
+    emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgAccQual, AQ, 1);
+  }
 
   // Emit KeyArgAddrQual.
   if (auto *PT = dyn_cast<PointerType>(T)) {
@@ -947,8 +951,33 @@ static void emitRuntimeMetadataForKernelArg(const DataLayout &DL,
                           PT->getAddressSpace(), 1);
   }
 
+  // Emit KeyArgIsHidden.
+  if (IsHidden)
+    OutStreamer->EmitIntValue(RuntimeMD::KeyArgIsHidden, 1);
+
   // Emit KeyArgEnd
   OutStreamer->EmitIntValue(RuntimeMD::KeyArgEnd, 1);
+}
+
+// Check if a function calls printf directly or indirectly.
+static bool callsPrintf(const Function *F,
+                        DenseMap<const Function *, bool> &Work) {
+  if (!F)
+    return false;
+  auto I = Work.find(F);
+  if (I != Work.end())
+    return I->second;
+  for (auto &I : instructions(F))
+    if (auto CS = CallSite(const_cast<Instruction *>(&I))) {
+      auto Called = CS.getCalledFunction();
+      if ((Called->hasName() && Called->getName() == "printf")
+          || callsPrintf(Called, Work)) {
+        Work[F] = true;
+        return true;
+      }
+    }
+  Work[F] = false;
+  return false;
 }
 
 void AMDGPUAsmPrinter::emitRuntimeMetadata(const Function &F) {
@@ -975,9 +1004,23 @@ void AMDGPUAsmPrinter::emitRuntimeMetadata(const Function &F) {
     auto TypeQual = cast<MDString>(F.getMetadata(
         "kernel_arg_type_qual")->getOperand(I))->getString();
     auto AccQual = cast<MDString>(F.getMetadata(
-      "kernel_arg_access_qual")->getOperand(I))->getString();
-    emitRuntimeMetadataForKernelArg(DL, OutStreamer, T, TypeName, BaseTypeName,
-        ArgName, TypeQual, AccQual);
+        "kernel_arg_access_qual")->getOperand(I))->getString();
+    emitRuntimeMetadataForKernelArg(DL, OutStreamer, T,
+        false, BaseTypeName, TypeName, ArgName, TypeQual, AccQual);
+  }
+
+  // Emit hidden kernel arguments for OpenCL kernels.
+  if (F.getParent()->getNamedMetadata("opencl.ocl.version")) {
+    auto Int64T = Type::getInt64Ty(F.getContext());
+    emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T, true);
+    emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T, true);
+    emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T, true);
+    DenseMap<const Function *, bool> Work;
+    if (callsPrintf(&F, Work)) {
+      auto Int8PtrT = Type::getInt8PtrTy(F.getContext(),
+          RuntimeMD::KernelArg::Global);
+      emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int8PtrT, true);
+    }
   }
 
   // Emit KeyReqdWorkGroupSize, KeyWorkGroupSizeHint, and KeyVecTypeHint.
