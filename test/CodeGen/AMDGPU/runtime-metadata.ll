@@ -16,12 +16,12 @@
 ; CHECK-NEXT: .byte	0
 ; CHECK-NEXT: .byte	3
 ; CHECK-NEXT: .short	200
-; CHECK-NEXT: .byte	32
-; CHECK-NEXT: .long	10
-; CHECK-NEXT: .ascii	"1:1:4:%d\\n"
-; CHECK-NEXT: .byte	32
-; CHECK-NEXT: .long	10
-; CHECK-NEXT: .ascii	"2:1:8:%g\\n"
+; CHECK-NEXT: .byte     32
+; CHECK-NEXT: .long     10
+; CHECK-NEXT: .ascii    "1:1:4:%d\\n"
+; CHECK-NEXT: .byte     32
+; CHECK-NEXT: .long     10
+; CHECK-NEXT: .ascii    "2:1:8:%g\\n"
 
 ; CHECK-LABEL:{{^}}test_char:
 ; CHECK: .section        .AMDGPU.runtime_metadata
@@ -2399,7 +2399,6 @@ define amdgpu_kernel void @test_arg_vector_of_ptr(<2 x i32 addrspace(1)*> %a) !k
 ; CHECK-NEXT: .byte	33
 ; CHECK-NEXT: .byte	8
 ; CHECK-NEXT: .byte	5
-
 
 define amdgpu_kernel void @test_arg_unknown_builtin_type(%opencl.clk_event_t addrspace(1)* %a) !kernel_arg_addr_space !81 !kernel_arg_access_qual !2 !kernel_arg_type !84 !kernel_arg_base_type !84 !kernel_arg_type_qual !4 {
   ret void
