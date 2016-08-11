@@ -959,27 +959,6 @@ static void emitRuntimeMetadataForKernelArg(const DataLayout &DL,
   OutStreamer->EmitIntValue(RuntimeMD::KeyArgEnd, 1);
 }
 
-// Check if a function calls printf directly or indirectly.
-static bool callsPrintf(const Function *F,
-                        DenseMap<const Function *, bool> &Work) {
-  if (!F)
-    return false;
-  auto I = Work.find(F);
-  if (I != Work.end())
-    return I->second;
-  for (auto &I : instructions(F))
-    if (auto CS = CallSite(const_cast<Instruction *>(&I))) {
-      auto Called = CS.getCalledFunction();
-      if ((Called->hasName() && Called->getName() == "printf")
-          || callsPrintf(Called, Work)) {
-        Work[F] = true;
-        return true;
-      }
-    }
-  Work[F] = false;
-  return false;
-}
-
 void AMDGPUAsmPrinter::emitRuntimeMetadata(const Function &F) {
   if (!F.getMetadata("kernel_arg_type"))
     return;
@@ -1015,8 +994,7 @@ void AMDGPUAsmPrinter::emitRuntimeMetadata(const Function &F) {
     emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T, true);
     emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T, true);
     emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T, true);
-    DenseMap<const Function *, bool> Work;
-    if (callsPrintf(&F, Work)) {
+    if (auto MD = F.getParent()->getNamedMetadata("llvm.printf.fmts")) {
       auto Int8PtrT = Type::getInt8PtrTy(F.getContext(),
           RuntimeMD::KernelArg::Global);
       emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int8PtrT, true);
