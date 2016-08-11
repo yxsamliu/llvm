@@ -85,6 +85,7 @@ namespace RuntimeMD {
     KeyMaxWorkGroupSize         = 30, // Maximum work group size
     KeyNoPartialWorkGroups      = 31, // No partial work groups
     KeyPrintfInfo               = 32, // Prinf function call information
+    KeyArgIsHidden              = 33, // Kernel argument is hidden from user
   };
 
   enum Language : uint8_t {

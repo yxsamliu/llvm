@@ -880,6 +880,77 @@ static RuntimeMD::KernelArg::ValueType getRuntimeMDValueType(
   }
 }
 
+static void emitRuntimeMetadataForKernelArg(const DataLayout &DL,
+    std::unique_ptr<MCStreamer> &OutStreamer, Type *T, StringRef TypeName,
+    StringRef BaseTypeName, StringRef ArgName, StringRef TypeQual,
+    StringRef AccQual) {
+  // Emit KeyArgBegin.
+  OutStreamer->EmitIntValue(RuntimeMD::KeyArgBegin, 1);
+
+  // Emit KeyArgSize and KeyArgAlign.
+  emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgSize,
+                        DL.getTypeAllocSize(T), 4);
+  emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgAlign,
+                        DL.getABITypeAlignment(T), 4);
+
+  // Emit KeyArgTypeName.
+  emitRuntimeMDStringValue(*OutStreamer, RuntimeMD::KeyArgTypeName, TypeName);
+
+  // Emit KeyArgName.
+  if (!ArgName.empty())
+    emitRuntimeMDStringValue(*OutStreamer, RuntimeMD::KeyArgName, ArgName);
+
+  // Emit KeyArgIsVolatile, KeyArgIsRestrict, KeyArgIsConst and KeyArgIsPipe.
+  SmallVector<StringRef, 1> SplitQ;
+  TypeQual.split(SplitQ, " ", -1, false /* Drop empty entry */);
+
+  for (StringRef KeyName : SplitQ) {
+    auto Key = StringSwitch<RuntimeMD::Key>(KeyName)
+      .Case("volatile", RuntimeMD::KeyArgIsVolatile)
+      .Case("restrict", RuntimeMD::KeyArgIsRestrict)
+      .Case("const",    RuntimeMD::KeyArgIsConst)
+      .Case("pipe",     RuntimeMD::KeyArgIsPipe)
+      .Default(RuntimeMD::KeyNull);
+    OutStreamer->EmitIntValue(Key, 1);
+  }
+
+  // Emit KeyArgTypeKind.
+  auto TypeKind = StringSwitch<RuntimeMD::KernelArg::TypeKind>(BaseTypeName)
+    .Case("sampler_t", RuntimeMD::KernelArg::Sampler)
+    .Case("queue_t",   RuntimeMD::KernelArg::Queue)
+    .Cases("image1d_t", "image1d_array_t", "image1d_buffer_t",
+           "image2d_t" , "image2d_array_t",  RuntimeMD::KernelArg::Image)
+    .Cases("image2d_depth_t", "image2d_array_depth_t",
+           "image2d_msaa_t", "image2d_array_msaa_t",
+           "image2d_msaa_depth_t",  RuntimeMD::KernelArg::Image)
+    .Cases("image2d_array_msaa_depth_t", "image3d_t",
+           RuntimeMD::KernelArg::Image)
+    .Default(isa<PointerType>(T) ? RuntimeMD::KernelArg::Pointer :
+             RuntimeMD::KernelArg::Value);
+  emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgTypeKind, TypeKind, 1);
+
+  // Emit KeyArgValueType.
+  emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgValueType,
+                        getRuntimeMDValueType(T, BaseTypeName), 2);
+
+  // Emit KeyArgAccQual.
+  auto AQ = StringSwitch<RuntimeMD::KernelArg::AccessQualifer>(AccQual)
+    .Case("read_only",  RuntimeMD::KernelArg::ReadOnly)
+    .Case("write_only", RuntimeMD::KernelArg::WriteOnly)
+    .Case("read_write", RuntimeMD::KernelArg::ReadWrite)
+    .Default(RuntimeMD::KernelArg::None);
+  emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgAccQual, AQ, 1);
+
+  // Emit KeyArgAddrQual.
+  if (auto *PT = dyn_cast<PointerType>(T)) {
+    emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgAddrQual,
+                          PT->getAddressSpace(), 1);
+  }
+
+  // Emit KeyArgEnd
+  OutStreamer->EmitIntValue(RuntimeMD::KeyArgEnd, 1);
+}
+
 void AMDGPUAsmPrinter::emitRuntimeMetadata(const Function &F) {
   if (!F.getMetadata("kernel_arg_type"))
     return;
@@ -890,85 +961,23 @@ void AMDGPUAsmPrinter::emitRuntimeMetadata(const Function &F) {
   OutStreamer->EmitIntValue(RuntimeMD::KeyKernelBegin, 1);
   emitRuntimeMDStringValue(*OutStreamer, RuntimeMD::KeyKernelName, F.getName());
 
+  const DataLayout &DL = F.getParent()->getDataLayout();
   for (auto &Arg : F.args()) {
-    // Emit KeyArgBegin.
     unsigned I = Arg.getArgNo();
-    OutStreamer->EmitIntValue(RuntimeMD::KeyArgBegin, 1);
-
-    // Emit KeyArgSize and KeyArgAlign.
     Type *T = Arg.getType();
-    const DataLayout &DL = F.getParent()->getDataLayout();
-    emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgSize,
-                          DL.getTypeAllocSize(T), 4);
-    emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgAlign,
-                          DL.getABITypeAlignment(T), 4);
-
-    // Emit KeyArgTypeName.
     auto TypeName = dyn_cast<MDString>(F.getMetadata(
-      "kernel_arg_type")->getOperand(I))->getString();
-    emitRuntimeMDStringValue(*OutStreamer, RuntimeMD::KeyArgTypeName, TypeName);
-
-    // Emit KeyArgName.
-    if (auto ArgNameMD = F.getMetadata("kernel_arg_name")) {
-      auto ArgName = cast<MDString>(ArgNameMD->getOperand(I))->getString();
-      emitRuntimeMDStringValue(*OutStreamer, RuntimeMD::KeyArgName, ArgName);
-    }
-
-    // Emit KeyArgIsVolatile, KeyArgIsRestrict, KeyArgIsConst and KeyArgIsPipe.
+        "kernel_arg_type")->getOperand(I))->getString();
+    auto BaseTypeName = cast<MDString>(F.getMetadata(
+        "kernel_arg_base_type")->getOperand(I))->getString();
+    StringRef ArgName;
+    if (auto ArgNameMD = F.getMetadata("kernel_arg_name"))
+      ArgName = cast<MDString>(ArgNameMD->getOperand(I))->getString();
     auto TypeQual = cast<MDString>(F.getMetadata(
-      "kernel_arg_type_qual")->getOperand(I))->getString();
-    SmallVector<StringRef, 1> SplitQ;
-    TypeQual.split(SplitQ, " ", -1, false /* Drop empty entry */);
-
-    for (StringRef KeyName : SplitQ) {
-      auto Key = StringSwitch<RuntimeMD::Key>(KeyName)
-        .Case("volatile", RuntimeMD::KeyArgIsVolatile)
-        .Case("restrict", RuntimeMD::KeyArgIsRestrict)
-        .Case("const",    RuntimeMD::KeyArgIsConst)
-        .Case("pipe",     RuntimeMD::KeyArgIsPipe)
-        .Default(RuntimeMD::KeyNull);
-      OutStreamer->EmitIntValue(Key, 1);
-    }
-
-    // Emit KeyArgTypeKind.
-    auto BaseTypeName = cast<MDString>(
-      F.getMetadata("kernel_arg_base_type")->getOperand(I))->getString();
-    auto TypeKind = StringSwitch<RuntimeMD::KernelArg::TypeKind>(BaseTypeName)
-      .Case("sampler_t", RuntimeMD::KernelArg::Sampler)
-      .Case("queue_t",   RuntimeMD::KernelArg::Queue)
-      .Cases("image1d_t", "image1d_array_t", "image1d_buffer_t",
-             "image2d_t" , "image2d_array_t",  RuntimeMD::KernelArg::Image)
-      .Cases("image2d_depth_t", "image2d_array_depth_t",
-             "image2d_msaa_t", "image2d_array_msaa_t",
-             "image2d_msaa_depth_t",  RuntimeMD::KernelArg::Image)
-      .Cases("image2d_array_msaa_depth_t", "image3d_t",
-             RuntimeMD::KernelArg::Image)
-      .Default(isa<PointerType>(T) ? RuntimeMD::KernelArg::Pointer :
-               RuntimeMD::KernelArg::Value);
-    emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgTypeKind, TypeKind, 1);
-
-    // Emit KeyArgValueType.
-    emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgValueType,
-                          getRuntimeMDValueType(T, BaseTypeName), 2);
-
-    // Emit KeyArgAccQual.
+        "kernel_arg_type_qual")->getOperand(I))->getString();
     auto AccQual = cast<MDString>(F.getMetadata(
       "kernel_arg_access_qual")->getOperand(I))->getString();
-    auto AQ = StringSwitch<RuntimeMD::KernelArg::AccessQualifer>(AccQual)
-      .Case("read_only",  RuntimeMD::KernelArg::ReadOnly)
-      .Case("write_only", RuntimeMD::KernelArg::WriteOnly)
-      .Case("read_write", RuntimeMD::KernelArg::ReadWrite)
-      .Default(RuntimeMD::KernelArg::None);
-    emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgAccQual, AQ, 1);
-
-    // Emit KeyArgAddrQual.
-    if (auto *PT = dyn_cast<PointerType>(T)) {
-      emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgAddrQual,
-                            PT->getAddressSpace(), 1);
-    }
-
-    // Emit KeyArgEnd
-    OutStreamer->EmitIntValue(RuntimeMD::KeyArgEnd, 1);
+    emitRuntimeMetadataForKernelArg(DL, OutStreamer, T, TypeName, BaseTypeName,
+        ArgName, TypeQual, AccQual);
   }
 
   // Emit KeyReqdWorkGroupSize, KeyWorkGroupSizeHint, and KeyVecTypeHint.
