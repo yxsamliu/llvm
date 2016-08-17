@@ -139,6 +139,8 @@ namespace RuntimeMD {
       Global     = 1,
       Constant   = 2,
       Local      = 3,
+      Generic    = 4,
+      Region     = 5,
     };
   } // namespace KernelArg
 } // namespace RuntimeMD
