@@ -881,7 +881,8 @@ static RuntimeMD::KernelArg::ValueType getRuntimeMDValueType(
 }
 
 static void emitRuntimeMetadataForKernelArg(const DataLayout &DL,
-    std::unique_ptr<MCStreamer> &OutStreamer, Type *T, bool IsHidden,
+    std::unique_ptr<MCStreamer> &OutStreamer, Type *T,
+    RuntimeMD::KernelArg::Kind Kind,
     StringRef TypeName = "", StringRef BaseTypeName = "",
     StringRef ArgName = "", StringRef TypeQual = "", StringRef AccQual = "") {
   // Emit KeyArgBegin.
@@ -915,20 +916,8 @@ static void emitRuntimeMetadataForKernelArg(const DataLayout &DL,
     OutStreamer->EmitIntValue(Key, 1);
   }
 
-  // Emit KeyArgTypeKind.
-  auto TypeKind = StringSwitch<RuntimeMD::KernelArg::TypeKind>(BaseTypeName)
-    .Case("sampler_t", RuntimeMD::KernelArg::Sampler)
-    .Case("queue_t",   RuntimeMD::KernelArg::Queue)
-    .Cases("image1d_t", "image1d_array_t", "image1d_buffer_t",
-           "image2d_t" , "image2d_array_t",  RuntimeMD::KernelArg::Image)
-    .Cases("image2d_depth_t", "image2d_array_depth_t",
-           "image2d_msaa_t", "image2d_array_msaa_t",
-           "image2d_msaa_depth_t",  RuntimeMD::KernelArg::Image)
-    .Cases("image2d_array_msaa_depth_t", "image3d_t",
-           RuntimeMD::KernelArg::Image)
-    .Default(isa<PointerType>(T) ? RuntimeMD::KernelArg::Pointer :
-             RuntimeMD::KernelArg::Value);
-  emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgTypeKind, TypeKind, 1);
+  // Emit KeyArgKind.
+  emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgKind, Kind, 1);
 
   // Emit KeyArgValueType.
   emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgValueType,
@@ -946,13 +935,29 @@ static void emitRuntimeMetadataForKernelArg(const DataLayout &DL,
 
   // Emit KeyArgAddrQual.
   if (auto *PT = dyn_cast<PointerType>(T)) {
-    emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgAddrQual,
-                          PT->getAddressSpace(), 1);
+    RuntimeMD::KernelArg::AddressSpaceQualifer Addr;
+    switch(PT->getAddressSpace()) {
+    case 1:
+      Addr = RuntimeMD::KernelArg::Global;
+      break;
+    case 2:
+      Addr = RuntimeMD::KernelArg::Constant;
+      break;
+    case 3:
+      Addr = RuntimeMD::KernelArg::Local;
+      break;
+    case 4:
+      Addr = RuntimeMD::KernelArg::Generic;
+      break;
+    case 5:
+      Addr = RuntimeMD::KernelArg::Region;
+      break;
+    default:
+      Addr = RuntimeMD::KernelArg::Private;
+      break;
+    }
+    emitRuntimeMDIntValue(*OutStreamer, RuntimeMD::KeyArgAddrQual, Addr, 1);
   }
-
-  // Emit KeyArgIsHidden.
-  if (IsHidden)
-    OutStreamer->EmitIntValue(RuntimeMD::KeyArgIsHidden, 1);
 
   // Emit KeyArgEnd
   OutStreamer->EmitIntValue(RuntimeMD::KeyArgEnd, 1);
@@ -983,20 +988,41 @@ void AMDGPUAsmPrinter::emitRuntimeMetadata(const Function &F) {
         "kernel_arg_type_qual")->getOperand(I))->getString();
     auto AccQual = cast<MDString>(F.getMetadata(
         "kernel_arg_access_qual")->getOperand(I))->getString();
+    RuntimeMD::KernelArg::Kind Kind;
+    if (TypeQual.find("pipe") != StringRef::npos)
+      Kind = RuntimeMD::KernelArg::Pipe;
+    else Kind = StringSwitch<RuntimeMD::KernelArg::Kind>(BaseTypeName)
+      .Case("sampler_t", RuntimeMD::KernelArg::Sampler)
+      .Case("queue_t",   RuntimeMD::KernelArg::Queue)
+      .Cases("image1d_t", "image1d_array_t", "image1d_buffer_t",
+             "image2d_t" , "image2d_array_t",  RuntimeMD::KernelArg::Image)
+      .Cases("image2d_depth_t", "image2d_array_depth_t",
+             "image2d_msaa_t", "image2d_array_msaa_t",
+             "image2d_msaa_depth_t",  RuntimeMD::KernelArg::Image)
+      .Cases("image2d_array_msaa_depth_t", "image3d_t",
+             RuntimeMD::KernelArg::Image)
+      .Default(!isa<PointerType>(T) ? RuntimeMD::KernelArg::ByValue :
+                   T->getPointerAddressSpace() == 3 ?
+                   RuntimeMD::KernelArg::DynamicSharedPointer :
+                   RuntimeMD::KernelArg::GlobalBuffer);
     emitRuntimeMetadataForKernelArg(DL, OutStreamer, T,
-        false, BaseTypeName, TypeName, ArgName, TypeQual, AccQual);
+        Kind, BaseTypeName, TypeName, ArgName, TypeQual, AccQual);
   }
 
   // Emit hidden kernel arguments for OpenCL kernels.
   if (F.getParent()->getNamedMetadata("opencl.ocl.version")) {
     auto Int64T = Type::getInt64Ty(F.getContext());
-    emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T, true);
-    emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T, true);
-    emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T, true);
+    emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T,
+                                    RuntimeMD::KernelArg::HiddenGlobalOffsetX);
+    emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T,
+                                    RuntimeMD::KernelArg::HiddenGlobalOffsetY);
+    emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int64T,
+                                    RuntimeMD::KernelArg::HiddenGlobalOffsetZ);
     if (auto MD = F.getParent()->getNamedMetadata("llvm.printf.fmts")) {
       auto Int8PtrT = Type::getInt8PtrTy(F.getContext(),
           RuntimeMD::KernelArg::Global);
-      emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int8PtrT, true);
+      emitRuntimeMetadataForKernelArg(DL, OutStreamer, Int8PtrT,
+                                      RuntimeMD::KernelArg::HiddenPrintfBuffer);
     }
   }
 
