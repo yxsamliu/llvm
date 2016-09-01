@@ -84,6 +84,7 @@ namespace RuntimeMD {
     KeyNoPartialWorkGroups      = 29, // No partial work groups
     KeyPrintfInfo               = 30, // Prinf function call information
     KeyArgActualAcc             = 31, // The actual kernel argument access qualifier
+    KeyArgPointeeAlign          = 32, // Alignment of pointee type
   };
 
   enum Language : uint8_t {
