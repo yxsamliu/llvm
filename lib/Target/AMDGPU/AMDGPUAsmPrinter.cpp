@@ -901,7 +901,7 @@ static RuntimeMD::KernelArg::AddressSpaceQualifer getRuntimeAddrSpace(
 static void emitRuntimeMetadataForKernelArg(const DataLayout &DL,
     MCStreamer &OutStreamer, Type *T,
     RuntimeMD::KernelArg::Kind Kind,
-    StringRef TypeName = "", StringRef BaseTypeName = "",
+    StringRef BaseTypeName = "", StringRef TypeName = "",
     StringRef ArgName = "", StringRef TypeQual = "", StringRef AccQual = "") {
   // Emit KeyArgBegin.
   OutStreamer.EmitIntValue(RuntimeMD::KeyArgBegin, 1);
