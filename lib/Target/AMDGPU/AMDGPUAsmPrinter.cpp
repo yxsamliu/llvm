@@ -923,25 +923,37 @@ static RuntimeMD::KernelArg::AddressSpaceQualifer getRuntimeAddrSpace(
   }
 }
 
+// \param SExt Argument is sign extended by runtime.
+// \param ZExt Argument is zero extended by runtime.
 static void emitRuntimeMetadataForKernelArg(const DataLayout &DL,
     MCStreamer &OutStreamer, Type *T,
     RuntimeMD::KernelArg::Kind Kind,
+    bool SExt = false, bool ZExt = false,
     StringRef BaseTypeName = "", StringRef TypeName = "",
     StringRef ArgName = "", StringRef TypeQual = "", StringRef AccQual = "") {
   // Emit KeyArgBegin.
   OutStreamer.EmitIntValue(RuntimeMD::KeyArgBegin, 1);
 
   // Emit KeyArgSize and KeyArgAlign.
+  // For scalar integer argument smaller than 32 bit, runtime extends them to
+  // 32 bit, therefore their size is 4 bytes.
+  bool Ext = SExt || ZExt;
   emitRuntimeMDIntValue(OutStreamer, RuntimeMD::KeyArgSize,
-                        DL.getTypeAllocSize(T), 4);
+                        Ext ? 4 : DL.getTypeAllocSize(T), 4);
   emitRuntimeMDIntValue(OutStreamer, RuntimeMD::KeyArgAlign,
-                        DL.getABITypeAlignment(T), 4);
+                        Ext ? 4 : DL.getABITypeAlignment(T), 4);
   if (auto PT = dyn_cast<PointerType>(T)) {
     auto ET = PT->getElementType();
     if (PT->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS && ET->isSized())
       emitRuntimeMDIntValue(OutStreamer, RuntimeMD::KeyArgPointeeAlign,
                         DL.getABITypeAlignment(ET), 4);
   }
+
+  // Emit KeyArgSExt and KeyArgZExt.
+  if (SExt)
+    OutStreamer.EmitIntValue(RuntimeMD::KeyArgSExt, 1);
+  if (ZExt)
+    OutStreamer.EmitIntValue(RuntimeMD::KeyArgZExt, 1);
 
   // Emit KeyArgTypeName.
   if (!TypeName.empty())
@@ -1006,6 +1018,9 @@ void AMDGPUAsmPrinter::emitRuntimeMetadata(const Function &F) {
   for (auto &Arg : F.args()) {
     unsigned I = Arg.getArgNo();
     Type *T = Arg.getType();
+    // For scalar integer type kernel argument smaller than 32 bit, runtime
+    // extends them to 32 bit.
+    bool Ext = T->isIntegerTy() && T->getIntegerBitWidth() < 32;
     auto TypeName = dyn_cast<MDString>(F.getMetadata(
         "kernel_arg_type")->getOperand(I))->getString();
     auto BaseTypeName = cast<MDString>(F.getMetadata(
@@ -1036,7 +1051,10 @@ void AMDGPUAsmPrinter::emitRuntimeMetadata(const Function &F) {
                    RuntimeMD::KernelArg::GlobalBuffer) :
                    RuntimeMD::KernelArg::ByValue);
     emitRuntimeMetadataForKernelArg(DL, *OutStreamer, T,
-        Kind, BaseTypeName, TypeName, ArgName, TypeQual, AccQual);
+                                    Kind, Ext ? Arg.hasSExtAttr() : false,
+                                    Ext ? Arg.hasZExtAttr() : false,
+                                    BaseTypeName, TypeName, ArgName, TypeQual,
+                                    AccQual);
   }
 
   // Emit hidden kernel arguments for OpenCL kernels.

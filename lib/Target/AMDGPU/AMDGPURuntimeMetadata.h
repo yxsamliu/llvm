@@ -85,6 +85,8 @@ namespace RuntimeMD {
     KeyPrintfInfo               = 30, // Prinf function call information
     KeyArgActualAcc             = 31, // The actual kernel argument access qualifier
     KeyArgPointeeAlign          = 32, // Alignment of pointee type
+    KeyArgSExt                  = 33, // Argument needs sign extension
+    KeyArgZExt                  = 34, // Argument needs zero extension
   };
 
   enum Language : uint8_t {

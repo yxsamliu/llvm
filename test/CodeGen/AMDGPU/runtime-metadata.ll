@@ -31,9 +31,10 @@
 ; CHECK-NEXT: .ascii	"test_char"
 ; CHECK-NEXT: .byte	7
 ; CHECK-NEXT: .byte	9
-; CHECK-NEXT: .long	1
+; CHECK-NEXT: .long	4
 ; CHECK-NEXT: .byte	10
-; CHECK-NEXT: .long	1
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	33
 ; CHECK-NEXT: .byte	11
 ; CHECK-NEXT: .long	4
 ; CHECK-NEXT: .ascii	"char"
@@ -88,7 +89,7 @@
 ; CHECK-NEXT: .byte	8
 ; CHECK-NEXT: .byte	5
 
-define amdgpu_kernel void @test_char(i8 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !9 !kernel_arg_base_type !9 !kernel_arg_type_qual !4 {
+define amdgpu_kernel void @test_char(i8 signext %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !9 !kernel_arg_base_type !9 !kernel_arg_type_qual !4 {
   ret void
 }
 
@@ -2472,6 +2473,269 @@ define amdgpu_kernel void @test_pointee_align(i64 addrspace(1)* %a, i8 addrspace
   ret void
 }
 
+; CHECK-LABEL:{{^}}test_sext:
+; CHECK: .section        .AMDGPU.runtime_metadata
+; CHECK-NEXT: .byte	4
+; CHECK-NEXT: .byte	6
+; CHECK-NEXT: .long	9
+; CHECK-NEXT: .ascii	"test_sext"
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	33
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .ascii	"char"
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	1
+; CHECK-NEXT: .byte	16
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	33
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .long	5
+; CHECK-NEXT: .ascii	"short"
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	3
+; CHECK-NEXT: .byte	16
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	2
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	2
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .long	5
+; CHECK-NEXT: .ascii	"char2"
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	1
+; CHECK-NEXT: .byte	16
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .long	6
+; CHECK-NEXT: .ascii	"short2"
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	3
+; CHECK-NEXT: .byte	16
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .long	3
+; CHECK-NEXT: .ascii	"int"
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	6
+; CHECK-NEXT: .byte	16
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	9
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	9
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	9
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	1
+; CHECK-NEXT: .byte	15
+; CHECK-NEXT: .byte	1
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	5
+
+define amdgpu_kernel void @test_sext(i8 signext %a, i16 signext %b, <2 x i8> %c, <2 x i16> %d, i32 signext %e) !kernel_arg_addr_space !111 !kernel_arg_access_qual !112 !kernel_arg_type !113 !kernel_arg_base_type !113 !kernel_arg_type_qual !114 {
+  ret void
+}
+
+; CHECK-LABEL:{{^}}test_zext:
+; CHECK: .section        .AMDGPU.runtime_metadata
+; CHECK-NEXT: .byte	4
+; CHECK-NEXT: .byte	6
+; CHECK-NEXT: .long	9
+; CHECK-NEXT: .ascii	"test_zext"
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	34
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .long	5
+; CHECK-NEXT: .ascii	"uchar"
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	2
+; CHECK-NEXT: .byte	16
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	34
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .long	6
+; CHECK-NEXT: .ascii	"ushort"
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	4
+; CHECK-NEXT: .byte	16
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	2
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	2
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .long	6
+; CHECK-NEXT: .ascii	"uchar2"
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	2
+; CHECK-NEXT: .byte	16
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .long	7
+; CHECK-NEXT: .ascii	"ushort2"
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	4
+; CHECK-NEXT: .byte	16
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .long	4
+; CHECK-NEXT: .ascii	"uint"
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	7
+; CHECK-NEXT: .byte	16
+; CHECK-NEXT: .byte	0
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	9
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	9
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	9
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	7
+; CHECK-NEXT: .byte	9
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	10
+; CHECK-NEXT: .long	8
+; CHECK-NEXT: .byte	13
+; CHECK-NEXT: .byte	11
+; CHECK-NEXT: .byte	14
+; CHECK-NEXT: .short	1
+; CHECK-NEXT: .byte	15
+; CHECK-NEXT: .byte	1
+; CHECK-NEXT: .byte	8
+; CHECK-NEXT: .byte	5
+
+
+define amdgpu_kernel void @test_zext(i8 zeroext %a, i16 zeroext %b, <2 x i8> %c, <2 x i16> %d, i32 zeroext %e) !kernel_arg_addr_space !111 !kernel_arg_access_qual !112 !kernel_arg_type !121 !kernel_arg_base_type !121 !kernel_arg_type_qual !114 {
+  ret void
+}
+
 !llvm.printf.fmts = !{!100, !101}
 
 !1 = !{i32 0}
@@ -2525,3 +2789,8 @@ define amdgpu_kernel void @test_pointee_align(i64 addrspace(1)* %a, i8 addrspace
 !94 = !{!"", !"", !"", !"", !"", !"", !""}
 !100 = !{!"1:1:4:%d\5Cn"}
 !101 = !{!"2:1:8:%g\5Cn"}
+!111 = !{i32 0, i32 0, i32 0, i32 0, i32 0}
+!112 = !{!"none", !"none", !"none", !"none", !"none"}
+!113 = !{!"char", !"short", !"char2", !"short2", !"int"}
+!114 = !{!"", !"", !"", !"", !""}
+!121 = !{!"uchar", !"ushort", !"uchar2", !"ushort2", !"uint"}
