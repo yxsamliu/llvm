@@ -29,7 +29,8 @@ void CoveragePrinter::StreamDestructor::operator()(raw_ostream *OS) const {
 }
 
 std::string CoveragePrinter::getOutputPath(StringRef Path, StringRef Extension,
-                                           bool InToplevel, bool Relative) {
+                                           bool InToplevel,
+                                           bool Relative) const {
   assert(Extension.size() && "The file extension may not be empty");
 
   SmallString<256> FullPath;
@@ -53,7 +54,7 @@ std::string CoveragePrinter::getOutputPath(StringRef Path, StringRef Extension,
 
 Expected<CoveragePrinter::OwnedStream>
 CoveragePrinter::createOutputStream(StringRef Path, StringRef Extension,
-                                    bool InToplevel) {
+                                    bool InToplevel) const {
   if (!Opts.hasOutputDirectory())
     return OwnedStream(&outs());
 
@@ -129,26 +130,28 @@ bool SourceCoverageView::hasSubViews() const {
 std::unique_ptr<SourceCoverageView>
 SourceCoverageView::create(StringRef SourceName, const MemoryBuffer &File,
                            const CoverageViewOptions &Options,
-                           coverage::CoverageData &&CoverageInfo,
-                           bool FunctionView) {
+                           coverage::CoverageData &&CoverageInfo) {
   switch (Options.Format) {
   case CoverageViewOptions::OutputFormat::Text:
     return llvm::make_unique<SourceCoverageViewText>(
-        SourceName, File, Options, std::move(CoverageInfo), FunctionView);
+        SourceName, File, Options, std::move(CoverageInfo));
   case CoverageViewOptions::OutputFormat::HTML:
     return llvm::make_unique<SourceCoverageViewHTML>(
-        SourceName, File, Options, std::move(CoverageInfo), FunctionView);
+        SourceName, File, Options, std::move(CoverageInfo));
   }
   llvm_unreachable("Unknown coverage output format!");
 }
 
-std::string SourceCoverageView::getNativeSourceName() const {
-  std::string SourceFile = isFunctionView() ? "Function: " : "Source: ";
-  SourceFile += getSourceName().str();
-  SmallString<128> SourceText(SourceFile);
+std::string SourceCoverageView::getSourceName() const {
+  SmallString<128> SourceText(SourceName);
   sys::path::remove_dots(SourceText, /*remove_dot_dots=*/true);
   sys::path::native(SourceText);
-  return SourceText.c_str();
+  return SourceText.str();
+}
+
+std::string SourceCoverageView::getVerboseSourceName() const {
+  return "Source: " + getSourceName() + " (Binary: " +
+         sys::path::filename(getOptions().ObjectFilename).str() + ")";
 }
 
 void SourceCoverageView::addExpansion(

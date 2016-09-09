@@ -76,9 +76,9 @@ extern char &SILowerControlFlowID;
 void initializeSIInsertSkipsPass(PassRegistry &);
 extern char &SIInsertSkipsPassID;
 
-ModulePass *createAMDConvertAtomicLibCallsPass();
-void initializeAMDConvertAtomicLibCallsPass(PassRegistry &);
-extern char &AMDConvertAtomicLibCallsID;
+ModulePass *createAMDGPUConvertAtomicLibCallsPass();
+void initializeAMDGPUConvertAtomicLibCallsPass(PassRegistry &);
+extern char &AMDGPUConvertAtomicLibCallsID;
 
 // Passes common to R600 and SI
 FunctionPass *createAMDGPUPromoteAlloca(const TargetMachine *TM = nullptr);
@@ -90,6 +90,14 @@ FunctionPass *createAMDGPUISelDag(TargetMachine &tm);
 ModulePass *createAMDGPUAlwaysInlinePass();
 ModulePass *createAMDGPUOpenCLImageTypeLoweringPass();
 FunctionPass *createAMDGPUAnnotateUniformValues();
+
+ModulePass *createAMDGPUOCL12AdapterPass();
+void initializeAMDGPUOCL12AdapterPass(PassRegistry&);
+extern char &AMDGPUOCL12AdapterID;
+
+ModulePass *createAMDGPUPrintfRuntimeBinding();
+void initializeAMDGPUPrintfRuntimeBindingPass(PassRegistry&);
+extern char &AMDGPUPrintfRuntimeBindingID;
 
 void initializeSIFixControlFlowLiveIntervalsPass(PassRegistry&);
 extern char &SIFixControlFlowLiveIntervalsID;

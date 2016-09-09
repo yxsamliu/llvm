@@ -115,12 +115,12 @@ protected:
   /// false, skip the ToplevelDir component. If \p Relative is false, skip the
   /// OutputDir component.
   std::string getOutputPath(StringRef Path, StringRef Extension,
-                            bool InToplevel, bool Relative = true);
+                            bool InToplevel, bool Relative = true) const;
 
   /// \brief If directory output is enabled, create a file in that directory
   /// at the path given by getOutputPath(). Otherwise, return stdout.
   Expected<OwnedStream> createOutputStream(StringRef Path, StringRef Extension,
-                                           bool InToplevel);
+                                           bool InToplevel) const;
 
   /// \brief Return the sub-directory name for file coverage reports.
   static StringRef getCoverageDir() { return "coverage"; }
@@ -142,7 +142,8 @@ public:
   virtual void closeViewFile(OwnedStream OS) = 0;
 
   /// \brief Create an index which lists reports for the given source files.
-  virtual Error createIndexFile(ArrayRef<StringRef> SourceFiles) = 0;
+  virtual Error createIndexFile(ArrayRef<StringRef> SourceFiles,
+                                const coverage::CoverageMapping &Coverage) = 0;
 
   /// @}
 };
@@ -171,9 +172,6 @@ class SourceCoverageView {
   /// A container for all instantiations (e.g template functions) in the source
   /// on display.
   std::vector<InstantiationView> InstantiationSubViews;
-
-  /// Specifies whether or not the view is a function view.
-  bool FunctionView;
 
   /// Get the first uncovered line number for the source file.
   unsigned getFirstUncoveredLineNo();
@@ -264,24 +262,24 @@ protected:
 
   SourceCoverageView(StringRef SourceName, const MemoryBuffer &File,
                      const CoverageViewOptions &Options,
-                     coverage::CoverageData &&CoverageInfo, bool FunctionView)
+                     coverage::CoverageData &&CoverageInfo)
       : SourceName(SourceName), File(File), Options(Options),
-        CoverageInfo(std::move(CoverageInfo)), FunctionView(FunctionView) {}
+        CoverageInfo(std::move(CoverageInfo)) {}
 
 public:
   static std::unique_ptr<SourceCoverageView>
   create(StringRef SourceName, const MemoryBuffer &File,
          const CoverageViewOptions &Options,
-         coverage::CoverageData &&CoverageInfo, bool FucntionView = false);
+         coverage::CoverageData &&CoverageInfo);
 
   virtual ~SourceCoverageView() {}
 
-  StringRef getSourceName() const { return SourceName; }
-
   /// \brief Return the source name formatted for the host OS.
-  std::string getNativeSourceName() const;
+  std::string getSourceName() const;
 
-  bool isFunctionView() const { return FunctionView; }
+  /// \brief Return a verbose description of the source name and the binary it
+  /// corresponds to.
+  std::string getVerboseSourceName() const;
 
   const CoverageViewOptions &getOptions() const { return Options; }
 

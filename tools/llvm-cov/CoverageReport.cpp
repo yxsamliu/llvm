@@ -116,11 +116,25 @@ raw_ostream::Colors determineCoveragePercentageColor(const T &Info) {
                                           : raw_ostream::RED;
 }
 
+/// \brief Determine the length of the longest common prefix of the strings in
+/// \p Strings.
+unsigned getLongestCommonPrefixLen(ArrayRef<StringRef> Strings) {
+  unsigned LCP = Strings[0].size();
+  for (unsigned I = 1, E = Strings.size(); LCP > 0 && I < E; ++I) {
+    auto Mismatch =
+        std::mismatch(Strings[0].begin(), Strings[0].end(), Strings[I].begin())
+            .first;
+    LCP = std::min(LCP, (unsigned)std::distance(Strings[0].begin(), Mismatch));
+  }
+  return LCP;
+}
+
 } // end anonymous namespace
 
 namespace llvm {
 
-void CoverageReport::render(const FileCoverageSummary &File, raw_ostream &OS) {
+void CoverageReport::render(const FileCoverageSummary &File,
+                            raw_ostream &OS) const {
   auto FileCoverageColor =
       determineCoveragePercentageColor(File.RegionCoverage);
   auto FuncCoverageColor =
@@ -156,7 +170,7 @@ void CoverageReport::render(const FileCoverageSummary &File, raw_ostream &OS) {
 }
 
 void CoverageReport::render(const FunctionCoverageSummary &Function,
-                            raw_ostream &OS) {
+                            raw_ostream &OS) const {
   auto FuncCoverageColor =
       determineCoveragePercentageColor(Function.RegionCoverage);
   auto LineCoverageColor =
@@ -221,7 +235,34 @@ void CoverageReport::renderFunctionReports(ArrayRef<StringRef> Files,
   }
 }
 
-void CoverageReport::renderFileReports(raw_ostream &OS) {
+std::vector<FileCoverageSummary>
+CoverageReport::prepareFileReports(FileCoverageSummary &Totals,
+                                   ArrayRef<StringRef> Files) const {
+  std::vector<FileCoverageSummary> FileReports;
+  unsigned LCP = 0;
+  if (Files.size() > 1)
+    LCP = getLongestCommonPrefixLen(Files);
+
+  for (StringRef Filename : Files) {
+    FileCoverageSummary Summary(Filename.drop_front(LCP));
+    for (const auto &F : Coverage.getCoveredFunctions(Filename)) {
+      FunctionCoverageSummary Function = FunctionCoverageSummary::get(F);
+      Summary.addFunction(Function);
+      Totals.addFunction(Function);
+    }
+    FileReports.push_back(Summary);
+  }
+
+  return FileReports;
+}
+
+void CoverageReport::renderFileReports(raw_ostream &OS) const {
+  std::vector<StringRef> UniqueSourceFiles = Coverage.getUniqueSourceFiles();
+  renderFileReports(OS, UniqueSourceFiles);
+}
+
+void CoverageReport::renderFileReports(raw_ostream &OS,
+                                       ArrayRef<StringRef> Files) const {
   adjustColumnWidths(Coverage);
   OS << column("Filename", FileReportColumns[0])
      << column("Regions", FileReportColumns[1], Column::RightAlignment)
@@ -237,15 +278,10 @@ void CoverageReport::renderFileReports(raw_ostream &OS) {
   OS << "\n";
 
   FileCoverageSummary Totals("TOTAL");
-  for (StringRef Filename : Coverage.getUniqueSourceFiles()) {
-    FileCoverageSummary Summary(Filename);
-    for (const auto &F : Coverage.getCoveredFunctions(Filename)) {
-      FunctionCoverageSummary Function = FunctionCoverageSummary::get(F);
-      Summary.addFunction(Function);
-      Totals.addFunction(Function);
-    }
-    render(Summary, OS);
-  }
+  auto FileReports = prepareFileReports(Totals, Files);
+  for (const FileCoverageSummary &FCS : FileReports)
+    render(FCS, OS);
+
   renderDivider(FileReportColumns, OS);
   OS << "\n";
   render(Totals, OS);
