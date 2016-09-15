@@ -434,7 +434,7 @@ bool AMDGPUConvertAtomicLibCalls::runOnModule(Module &M) {
         if (!CS)
           continue;
         const Function *Callee = getCallee(CS);
-        if (!Callee && Callee->hasName())
+        if (!Callee || !Callee->hasName())
           continue;
         Value *newAtomicInstr = lowerAtomic(Callee->getName(), &CS);
         if (newAtomicInstr) {
@@ -542,7 +542,7 @@ Value *LowerOCL1XAtomic(IRBuilder<> &Builder, CallSite * CS) {
     dyn_cast<AtomicRMWInst>(NI)->setSynchScope(
         (SynchronizationScope)OCL1XAtomicScope.getValue());
     if (NeedCast) {
-      NI = Builder.CreateBitCast(NI, F->getType());
+      NI = Builder.CreateBitCast(NI, F->getReturnType());
     }
   } else if (Type == CMPXCHG) {
     NI = Builder.CreateAtomicCmpXchg(

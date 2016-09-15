@@ -77,7 +77,10 @@ void Fuzzer::PrepareCounters(Fuzzer::Coverage *C) {
 bool Fuzzer::RecordMaxCoverage(Fuzzer::Coverage *C) {
   bool Res = false;
 
-  uint64_t NewBlockCoverage = EF->__sanitizer_get_total_unique_coverage();
+  TPC.FinalizeTrace();
+
+  uint64_t NewBlockCoverage =
+      EF->__sanitizer_get_total_unique_coverage() + TPC.GetTotalCoverage();
   if (NewBlockCoverage > C->BlockCoverage) {
     Res = true;
     C->BlockCoverage = NewBlockCoverage;
@@ -96,17 +99,13 @@ bool Fuzzer::RecordMaxCoverage(Fuzzer::Coverage *C) {
   if (Options.UseCounters) {
     uint64_t CounterDelta =
         EF->__sanitizer_update_counter_bitset_and_clear_counters(
-            C->CounterBitmap.data());
+            C->CounterBitmap.data()) +
+        TPC.UpdateCounterMap(&C->TPCMap);
     if (CounterDelta > 0) {
       Res = true;
       C->CounterBitmapBits += CounterDelta;
     }
-  }
 
-  size_t NewPCMapBits = PCMapMergeFromCurrent(C->PCMap);
-  if (NewPCMapBits > C->PCMapBits) {
-    Res = true;
-    C->PCMapBits = NewPCMapBits;
   }
 
   size_t NewVPMapBits = VPMapMergeFromCurrent(C->VPMap);
@@ -163,6 +162,7 @@ Fuzzer::Fuzzer(UserCallback CB, MutationDispatcher &MD, FuzzingOptions Options)
   IsMyThread = true;
   if (Options.DetectLeaks && EF->__sanitizer_install_malloc_and_free_hooks)
     EF->__sanitizer_install_malloc_and_free_hooks(MallocHook, FreeHook);
+  TPC.SetUseCounters(Options.UseCounters);
 
   if (Options.PrintNewCovPcs) {
     PcBufferLen = 1 << 24;
@@ -315,8 +315,6 @@ void Fuzzer::PrintStats(const char *Where, const char *End) {
   Printf("#%zd\t%s", TotalNumberOfRuns, Where);
   if (MaxCoverage.BlockCoverage)
     Printf(" cov: %zd", MaxCoverage.BlockCoverage);
-  if (MaxCoverage.PCMapBits)
-    Printf(" path: %zd", MaxCoverage.PCMapBits);
   if (MaxCoverage.VPMapBits)
     Printf(" vp: %zd", MaxCoverage.VPMapBits);
   if (auto TB = MaxCoverage.CounterBitmapBits)
@@ -508,9 +506,8 @@ std::string Fuzzer::Coverage::DebugString() const {
       std::string("Coverage{") + "BlockCoverage=" +
       std::to_string(BlockCoverage) + " CallerCalleeCoverage=" +
       std::to_string(CallerCalleeCoverage) + " CounterBitmapBits=" +
-      std::to_string(CounterBitmapBits) + " PCMapBits=" +
-      std::to_string(PCMapBits) + " VPMapBits " +
-      std::to_string(VPMapBits) + "}";
+      std::to_string(CounterBitmapBits) +
+      " VPMapBits " + std::to_string(VPMapBits) + "}";
   return Result;
 }
 
