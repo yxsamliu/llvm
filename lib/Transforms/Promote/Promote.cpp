@@ -907,11 +907,32 @@ void updateGEPWithNewOperand(GetElementPtrInst * GEP, Value * oldOperand, Value 
         if ( GEP->getPointerOperand() != oldOperand ) return;
 
         std::vector<Value *> Indices(GEP->idx_begin(), GEP->idx_end());
-
+#if 0
         Type* basisType = newOperand->getType()->getPointerElementType();
         GetElementPtrInst* newGEPI = GetElementPtrInst::Create(basisType, newOperand, Indices, "", GEP);
         DEBUG(newGEPI->dump(); llvm::errs() << "\n";);
         updateListWithUsers(GEP->user_begin(), GEP->user_end(), GEP, newGEPI, updatesNeeded);
+#else
+        Type * futureType =
+        GEP->getGEPReturnType(newOperand, ArrayRef<Value *>(Indices));
+
+        PointerType * futurePtrType = dyn_cast<PointerType>(futureType);
+        if ( !futurePtrType ) return;
+
+        // Must replace with new GEP to handle such case
+        // %26 = getelementptr inbounds %"class.Concurrency::graphics::unorm", %@"class.Concurrency::graphics::unorm.0" addrespace(1) %25, i64 0, i64 %25
+
+        GEP->setOperand (GEP->getPointerOperandIndex(), newOperand);
+        if ( futurePtrType == GEP->getType()) return;
+
+        Type* PointeeType = cast<PointerType>(newOperand->getType()->getScalarType())->getElementType();
+        if (!PointeeType) return;
+
+        GetElementPtrInst* newGEP = GetElementPtrInst::Create(PointeeType, newOperand,
+                SmallVector<Value *, 8>(GEP->idx_begin(), GEP->idx_end()), GEP->getName(), GEP);
+        newGEP->setIsInBounds(GEP->isInBounds());
+        updateListWithUsers(GEP->user_begin(), GEP->user_end(), GEP, newGEP, updatesNeeded);
+#endif
 }
 
 void updateCMPWithNewOperand(CmpInst *CMP, Value *oldOperand, Value *newOperand, InstUpdateWorkList *updatesNeeded)
