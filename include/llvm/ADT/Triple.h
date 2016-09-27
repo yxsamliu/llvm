@@ -191,7 +191,7 @@ public:
     Cygnus,
     AMDOpenCL,
     CoreCLR,
-
+    OpenCL,
     HCC,
     LastEnvironmentType = HCC
   };
