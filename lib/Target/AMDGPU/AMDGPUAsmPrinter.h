@@ -143,6 +143,8 @@ public:
 
   void EmitStartOfAsmFile(Module &M) override;
 
+  void EmitEndOfAsmFile(Module &) override;
+
   bool isBlockOnlyReachableByFallthrough(
     const MachineBasicBlock *MBB) const override;
 
