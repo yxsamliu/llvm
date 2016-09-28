@@ -131,13 +131,11 @@ public:
 
   void EmitStartOfAsmFile(Module &M) override;
 
+  void EmitEndOfAsmFile(Module &) override;
+
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
                        unsigned AsmVariant, const char *ExtraCode,
                        raw_ostream &O) override;
-
-  void emitStartOfRuntimeMetadata(const Module &M);
-
-  void emitRuntimeMetadata(const Function &F);
 
 protected:
   std::vector<std::string> DisasmLines, HexLines;
