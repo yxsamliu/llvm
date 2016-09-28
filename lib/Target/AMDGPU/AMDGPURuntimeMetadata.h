@@ -14,17 +14,12 @@
 /// Runtime requests certain information (metadata) about kernels to be able
 /// to execute the kernels and answer the queries about the kernels.
 /// The metadata is represented as a note element in the .note ELF section of a
-/// binary (code object). The desc field of the note element consists of
-/// key-value pairs. Each key is an 8 bit unsigned integer. Each value can be
-/// an integer, a string, or a stream of key-value pairs. There are 3 levels of
-/// key-value pair streams. At the beginning of the ELF section is the top level
-/// key-value pair stream. A kernel-level key-value pair stream starts after
-/// encountering KeyKernelBegin and ends immediately before encountering
-/// KeyKernelEnd. A kernel-argument-level key-value pair stream starts
-/// after encountering KeyArgBegin and ends immediately before encountering
-/// KeyArgEnd. A kernel-level key-value pair stream can only appear in a top
-/// level key-value pair stream. A kernel-argument-level key-value pair stream
-/// can only appear in a kernel-level key-value pair stream.
+/// binary (code object). The desc field of the note element is a YAML string
+/// consisting of key-value pairs. Each key is a string. Each value can be
+/// an integer, a string, or an YAML sequence. There are 3 levels of YAML maps.
+/// At the beginning of the YAML string is the module level YAML map. A
+/// kernel-level YAML map is in the amd.Kernels sequence. A
+/// kernel-argument-level map is in the amd.Args sequence.
 ///
 /// The format should be kept backward compatible. New enum values and bit
 /// fields should be appended at the end. It is suggested to bump up the
@@ -42,59 +37,37 @@ namespace AMDGPU {
 namespace RuntimeMD {
 
   // Version and revision of runtime metadata
-  const unsigned char MDVersion   = 1;
+  const unsigned char MDVersion   = 2;
   const unsigned char MDRevision  = 0;
 
-  // Enumeration values of keys in runtime metadata.
-  enum Key {
-    KeyNull                     = 0, // Place holder. Ignored when encountered
-    KeyMDVersion                = 1, // Runtime metadata version
-    KeyLanguage                 = 2, // Language
-    KeyLanguageVersion          = 3, // Language version
-    KeyKernelBegin              = 4, // Beginning of kernel-level stream
-    KeyKernelEnd                = 5, // End of kernel-level stream
-    KeyKernelName               = 6, // Kernel name
-    KeyArgBegin                 = 7, // Beginning of kernel-arg-level stream
-    KeyArgEnd                   = 8, // End of kernel-arg-level stream
-    KeyArgSize                  = 9, // Kernel arg size
-    KeyArgAlign                 = 10, // Kernel arg alignment
-    KeyArgTypeName              = 11, // Kernel type name
-    KeyArgName                  = 12, // Kernel name
-    KeyArgKind                  = 13, // Kernel argument kind
-    KeyArgValueType             = 14, // Kernel argument value type
-    KeyArgAddrQual              = 15, // Kernel argument address qualifier
-    KeyArgAccQual               = 16, // Kernel argument access qualifier
-    KeyArgIsConst               = 17, // Kernel argument is const qualified
-    KeyArgIsRestrict            = 18, // Kernel argument is restrict qualified
-    KeyArgIsVolatile            = 19, // Kernel argument is volatile qualified
-    KeyArgIsPipe                = 20, // Kernel argument is pipe qualified
-    KeyReqdWorkGroupSize        = 21, // Required work group size
-    KeyWorkGroupSizeHint        = 22, // Work group size hint
-    KeyVecTypeHint              = 23, // Vector type hint
-    KeyKernelIndex              = 24, // Kernel index for device enqueue
-    KeyMinWavesPerSIMD          = 25, // Minimum number of waves per SIMD
-    KeyMaxWavesPerSIMD          = 26, // Maximum number of waves per SIMD
-    KeyFlatWorkGroupSizeLimits  = 27, // Flat work group size limits
-    KeyMaxWorkGroupSize         = 28, // Maximum work group size
-    KeyNoPartialWorkGroups      = 29, // No partial work groups
-    KeyPrintfInfo               = 30, // Prinf function call information
-    KeyArgActualAcc             = 31, // The actual kernel argument access qualifier
-    KeyArgPointeeAlign          = 32, // Alignment of pointee type
-  };
-
-  enum Language : uint8_t {
-    OpenCL_C      = 0,
-    HCC           = 1,
-    OpenMP        = 2,
-    OpenCL_CPP    = 3,
-};
-
-  enum LanguageVersion : uint16_t {
-    V100          = 100,
-    V110          = 110,
-    V120          = 120,
-    V200          = 200,
-    V210          = 210,
+  // Name of keys for runtime metadata.
+  namespace KeyName {
+    const char MDVersion[]                = "amd.MDVersion";            // Runtime metadata version
+    const char Language[]                 = "amd.Language";             // Language
+    const char LanguageVersion[]          = "amd.LanguageVersion";      // Language version
+    const char Kernels[]                  = "amd.Kernels";              // Kernels
+    const char KernelName[]               = "amd.KernelName";           // Kernel name
+    const char Args[]                     = "amd.Args";                 // Kernel arguments
+    const char ArgSize[]                  = "amd.ArgSize";              // Kernel arg size
+    const char ArgAlign[]                 = "amd.ArgAlign";             // Kernel arg alignment
+    const char ArgTypeName[]              = "amd.ArgTypeName";          // Kernel type name
+    const char ArgName[]                  = "amd.ArgName";              // Kernel name
+    const char ArgKind[]                  = "amd.ArgKind";              // Kernel argument kind
+    const char ArgValueType[]             = "amd.ArgValueType";         // Kernel argument value type
+    const char ArgAddrQual[]              = "amd.ArgAddrQual";          // Kernel argument address qualifier
+    const char ArgAccQual[]               = "amd.ArgAccQual";           // Kernel argument access qualifier
+    const char ArgIsConst[]               = "amd.ArgIsConst";           // Kernel argument is const qualified
+    const char ArgIsRestrict[]            = "amd.ArgIsRestrict";        // Kernel argument is restrict qualified
+    const char ArgIsVolatile[]            = "amd.ArgIsVolatile";        // Kernel argument is volatile qualified
+    const char ArgIsPipe[]                = "amd.ArgIsPipe";            // Kernel argument is pipe qualified
+    const char ReqdWorkGroupSize[]        = "amd.ReqdWorkGroupSize";    // Required work group size
+    const char WorkGroupSizeHint[]        = "amd.WorkGroupSizeHint";    // Work group size hint
+    const char VecTypeHint[]              = "amd.VecTypeHint";          // Vector type hint
+    const char KernelIndex[]              = "amd.KernelIndex";          // Kernel index for device enqueue
+    const char NoPartialWorkGroups[]      = "amd.NoPartialWorkGroups";  // No partial work groups
+    const char PrintfInfo[]               = "amd.PrintfInfo";           // Prinf function call information
+    const char ArgActualAcc[]             = "amd.ArgActualAcc";         // The actual kernel argument access qualifier
+    const char ArgPointeeAlign[]          = "amd.ArgPointeeAlign";      // Alignment of pointee type
   };
 
   namespace KernelArg {
