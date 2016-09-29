@@ -2750,6 +2750,8 @@ CastInst *CastInst::CreateBitOrPointerCast(Value *S, Type *Ty,
     return Create(Instruction::PtrToInt, S, Ty, Name, InsertBefore);
   if (S->getType()->isIntegerTy() && Ty->isPointerTy())
     return Create(Instruction::IntToPtr, S, Ty, Name, InsertBefore);
+  if (S->getType()->isPtrOrPtrVectorTy() && Ty->isPtrOrPtrVectorTy())
+    return CreatePointerBitCastOrAddrSpaceCast(S, Ty, Name, InsertBefore);
 
   return Create(Instruction::BitCast, S, Ty, Name, InsertBefore);
 }

@@ -1441,6 +1441,8 @@ public:
     if (V->getType()->getScalarType()->isIntegerTy() &&
         DestTy->getScalarType()->isPointerTy())
       return CreateIntToPtr(V, DestTy, Name);
+    if (V->getType()->isPtrOrPtrVectorTy() && DestTy->isPtrOrPtrVectorTy())
+      return CreatePointerBitCastOrAddrSpaceCast(V, DestTy, Name);
 
     return CreateBitCast(V, DestTy, Name);
   }
