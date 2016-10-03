@@ -74,16 +74,14 @@ public:
                          std::unique_ptr<MCStreamer> Streamer)
       : AsmPrinter(TM, std::move(Streamer)), SM(*this) {}
 
-  const char *getPassName() const override {
-    return "PowerPC Assembly Printer";
-  }
+  StringRef getPassName() const override { return "PowerPC Assembly Printer"; }
 
-    MCSymbol *lookUpOrCreateTOCEntry(MCSymbol *Sym);
+  MCSymbol *lookUpOrCreateTOCEntry(MCSymbol *Sym);
 
-    virtual bool doInitialization(Module &M) override {
-      if (!TOC.empty())
-        TOC.clear();
-      return AsmPrinter::doInitialization(M);
+  virtual bool doInitialization(Module &M) override {
+    if (!TOC.empty())
+      TOC.clear();
+    return AsmPrinter::doInitialization(M);
     }
 
     void EmitInstruction(const MachineInstr *MI) override;
@@ -115,7 +113,7 @@ public:
                                 std::unique_ptr<MCStreamer> Streamer)
         : PPCAsmPrinter(TM, std::move(Streamer)) {}
 
-    const char *getPassName() const override {
+    StringRef getPassName() const override {
       return "Linux PPC Assembly Printer";
     }
 
@@ -136,7 +134,7 @@ public:
                                  std::unique_ptr<MCStreamer> Streamer)
         : PPCAsmPrinter(TM, std::move(Streamer)) {}
 
-    const char *getPassName() const override {
+    StringRef getPassName() const override {
       return "Darwin PPC Assembly Printer";
     }
 
@@ -1201,6 +1199,9 @@ void PPCLinuxAsmPrinter::EmitFunctionBodyStart() {
   if (Subtarget->isELFv2ABI()
       // Only do all that if the function uses r2 in the first place.
       && !MF->getRegInfo().use_empty(PPC::X2)) {
+    // Note: The logic here must be synchronized with the code in the
+    // branch-selection pass which sets the offset of the first block in the
+    // function. This matters because it affects the alignment.
     const PPCFunctionInfo *PPCFI = MF->getInfo<PPCFunctionInfo>();
 
     MCSymbol *GlobalEntryLabel = PPCFI->getGlobalEPSymbol();

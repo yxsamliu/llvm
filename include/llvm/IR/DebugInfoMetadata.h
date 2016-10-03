@@ -184,7 +184,7 @@ public:
   };
 
   static DIFlags getFlag(StringRef Flag);
-  static const char *getFlagString(DIFlags Flag);
+  static StringRef getFlagString(DIFlags Flag);
 
   /// \brief Split up a flags bitfield.
   ///
