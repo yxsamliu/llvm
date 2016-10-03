@@ -64,7 +64,7 @@ void updateInstructionWithNewOperand(Instruction * I,
                                      Value * newOperand,
                                      InstUpdateWorkList * updatesNeeded);
 
-void updateListWithUsers ( Value::user_iterator U, const Value::user_iterator& Ue, 
+void updateListWithUsers ( Value::user_iterator U, const Value::user_iterator& Ue,
                            Value * oldOperand, Value * newOperand,
                            InstUpdateWorkList * updates );
 /* This structure hold information on which instruction
@@ -662,7 +662,6 @@ void updateListWithUsers ( User *U, Value * oldOperand, Value * newOperand,
                 //
                 // notice that I2 can NOT be built from CE2->getAsInstruction() as it would
                 // increase user count of CE2 and CE, and would cause infinite loop
-                
                 for (Value::user_iterator CU2 = CE2->user_begin(), CUE2 = CE2->user_end(); CU2 != CUE2;) {
                     if (Instruction *I3 = dyn_cast<Instruction>(*CU2)) {
                         Insn = CE->getAsInstruction();
@@ -707,7 +706,7 @@ void updateListWithUsers ( User *U, Value * oldOperand, Value * newOperand,
         }
     }
 }
-void updateListWithUsers ( Value::user_iterator U, const Value::user_iterator& Ue, 
+void updateListWithUsers ( Value::user_iterator U, const Value::user_iterator& Ue,
                            Value * oldOperand, Value * newOperand,
                            InstUpdateWorkList * updates )
 {
@@ -771,7 +770,7 @@ void updatePHINodeWithNewOperand(PHINode * I, Value * oldOperand,
           } else if (isa<Constant>(V)) {
             Constant *CC = dyn_cast<Constant>(V);
 
-            DEBUG(llvm::errs() << "value#" << i << " update type from: ";  PTy->dump(); 
+            DEBUG(llvm::errs() << "value#" << i << " update type from: ";  PTy->dump();
             llvm::errs() << " to: "; PT->dump();
             llvm::errs() << " for constant: "; CC->dump(); llvm::errs() << "\n";);
 
@@ -828,7 +827,7 @@ void updateStoreInstWithNewOperand(StoreInst * I, Value * oldOperand, Value * ne
 
                 } else {
                   DEBUG(llvm::errs() << "ptrProducer is null\n";);
-                } 
+                }
         }
 }
 
@@ -980,7 +979,7 @@ void updateSELWithNewOperand(SelectInst * SEL, Value * oldOperand, Value * newOp
         SEL->mutateType(newOperand->getType());
         update = true;
       }
-    }    
+    }
     if(SEL->getOperand(2) == oldOperand) {
       SEL->setOperand (2, newOperand);
 
@@ -1001,7 +1000,7 @@ void updateSELWithNewOperand(SelectInst * SEL, Value * oldOperand, Value * newOp
     llvm::errs() << " op1 type: "; SEL->getOperand(1)->getType()->dump(); llvm::errs() << "\n";
     llvm::errs() << " op2 type: "; SEL->getOperand(2)->getType()->dump(); llvm::errs() << "\n";);
 
-    if(update) 
+    if(update)
       updateListWithUsers(SEL->user_begin(), SEL->user_end(), SEL, SEL, updatesNeeded);
 }
 
@@ -1113,7 +1112,7 @@ void CollectChangedCalledFunctions (Function * F, InstUpdateWorkList * updatesNe
 // yet, we set default memory scope as: _sys_ (5)
 void appendMemoryScopeMetadata(Instruction *I) {
   // set default memory scope as: _sys_ (5)
-  ConstantInt *C = ConstantInt::get(Type::getInt32Ty(I->getContext()), 5); 
+  ConstantInt *C = ConstantInt::get(Type::getInt32Ty(I->getContext()), 5);
   MDTuple *MD = MDTuple::get(I->getContext(), ConstantAsMetadata::get(C));
   I->setMetadata("mem.scope", MD);
 }
@@ -1217,7 +1216,7 @@ static bool usedInTheFunc(const User *U, const Function* F)
   if (const Instruction *instr = dyn_cast<Instruction>(U)) {
     if (instr->getParent() && instr->getParent()->getParent()) {
       const Function *curFunc = instr->getParent()->getParent();
-      if (curFunc->getName().str() == F->getName().str()) 
+      if (curFunc->getName().str() == F->getName().str())
         return true;
       else
         return false;
@@ -1319,7 +1318,7 @@ void promoteGlobalVars(Function *Func, InstUpdateWorkList * updateNeeded)
     for (Module::global_iterator I = globals.begin(), E = globals.end();
         I != E; I++) {
         unsigned the_space = LocalAddressSpace;
-        if (!I->hasSection() && I->isConstant() && 
+        if (!I->hasSection() && I->isConstant() &&
             I->getType()->getPointerAddressSpace() == 0 &&
             I->hasName() && I->getLinkage() == GlobalVariable::InternalLinkage) {
             // Though I'm global, I'm constant indeed.
@@ -1327,7 +1326,7 @@ void promoteGlobalVars(Function *Func, InstUpdateWorkList * updateNeeded)
             the_space = ConstantAddressSpace;
           else
             continue;
-        } else if (!I->hasSection() && I->isConstant() && 
+        } else if (!I->hasSection() && I->isConstant() &&
             I->getType()->getPointerAddressSpace() == 0 &&
             I->hasName() && I->getLinkage() == GlobalVariable::PrivateLinkage) {
             // Though I'm private, I'm constant indeed.
@@ -1337,7 +1336,6 @@ void promoteGlobalVars(Function *Func, InstUpdateWorkList * updateNeeded)
               the_space = ConstantAddressSpace;
             else
               continue;
-               
         } else if (!I->hasSection() ||
             I->getSection() != std::string(TILE_STATIC_NAME) ||
             !I->hasName()) {
@@ -1536,10 +1534,10 @@ void updateArgUsers (Function * F, InstUpdateWorkList * updateNeeded)
 
 // updateOperandType - Replace types of operand and return values with the promoted types if necessary
 // This function goes through the function's body and handles GEPs and select instruction specially.
-// After a function is cloned by calling CloneFunctionInto, some of the operands types 
+// After a function is cloned by calling CloneFunctionInto, some of the operands types
 // might not be updated correctly. Neither are some of  the instructions' return types.
 // For example,
-// (1) getelementptr instruction will leave type of its pointer operand un-promoted 
+// (1) getelementptr instruction will leave type of its pointer operand un-promoted
 // (2) select instruction will not update its return type as what has been changed to its #1 or #2 operand
 // Note that It is always safe to call this function right after CloneFunctionInto
 //
@@ -1621,7 +1619,7 @@ Function * createPromotedFunctionToType ( Function * F, FunctionType * promoteTy
               newFuncName = F->getName().str() + "_local";
               DEBUG(llvm::errs() << newFuncName << "\n";);
               promotedFunction = F->getParent()->getFunction(newFuncName);
-              if (!promotedFunction) { 
+              if (!promotedFunction) {
                 newFunction->setName(F->getName() + "_local");
               } else {
                 newFunction = promotedFunction;
@@ -1631,7 +1629,7 @@ Function * createPromotedFunctionToType ( Function * F, FunctionType * promoteTy
               newFuncName = F->getName().str() + "_global";
               DEBUG(llvm::errs() << newFuncName << "\n";);
               promotedFunction = F->getParent()->getFunction(newFuncName);
-              if (!promotedFunction) { 
+              if (!promotedFunction) {
                 newFunction->setName(F->getName() + "_global");
               } else {
                 newFunction = promotedFunction;
