@@ -937,6 +937,26 @@ void updateCMPWithNewOperand(CmpInst *CMP, Value *oldOperand, Value *newOperand,
       updateListWithUsers(CMP->user_begin(), CMP->user_end(), CMP, CMP, updatesNeeded);
 }
 
+void updatePtrToIntWithNewOperand(PtrToIntInst *PTI, Value *oldOperand, Value *newOperand, InstUpdateWorkList *updatesNeeded)
+{
+    DEBUG(llvm::errs() << "=== BEFORE UPDATE PtrToInt ===\n";
+    llvm::errs() << " new type: "; newOperand->getType()->dump(); llvm::errs() << "\n";
+    for (unsigned i = 0; i < PTI->getNumOperands(); ++i) {
+      llvm::errs() << " op#" << i << ": "; PTI->getOperand(i)->getType()->dump(); llvm::errs() << "\n";
+    });
+
+    bool update = false;
+    Value *V = PTI->getPointerOperand();
+    Type *T = V->getType();
+    if (T != newOperand->getType()) {
+      V->mutateType(newOperand->getType());
+      updateListWithUsers(V->user_begin(), V->user_end(), V, V, updatesNeeded);
+      update = true;
+    }
+    if (update)
+      updateListWithUsers(PTI->user_begin(), PTI->user_end(), PTI, PTI, updatesNeeded);
+}
+
 void updateSELWithNewOperand(SelectInst * SEL, Value * oldOperand, Value * newOperand, InstUpdateWorkList * updatesNeeded)
 {
     DEBUG(llvm::errs() << "=== BEFORE UPDATE SEL ===\n";
@@ -1146,7 +1166,7 @@ void updateInstructionWithNewOperand(Instruction * I,
            updatePHINodeWithNewOperand(PHI, oldOperand, newOperand, updatesNeeded);
            return;
        }
-       
+
        if (SelectInst * SEL = dyn_cast<SelectInst>(I)) {
            updateSELWithNewOperand(SEL, oldOperand, newOperand,updatesNeeded);
            return;
@@ -1157,8 +1177,8 @@ void updateInstructionWithNewOperand(Instruction * I,
            return;
        }
 
-       if (isa<PtrToIntInst>(I)) {
-           DEBUG(llvm::errs() << "No need to update ptrtoint\n";);
+       if (PtrToIntInst *PTI = dyn_cast<PtrToIntInst>(I)) {
+           updatePtrToIntWithNewOperand(PTI, oldOperand, newOperand, updatesNeeded);
            return;
        }
 
@@ -1174,7 +1194,7 @@ void updateInstructionWithNewOperand(Instruction * I,
 
        if (isa<AtomicRMWInst>(I) || isa<AtomicCmpXchgInst>(I) || isa<FenceInst>(I)) {
            appendMemoryScopeMetadata(I);
-           return; 
+           return;
        }
 
        if (isa<ReturnInst>(I)) {
