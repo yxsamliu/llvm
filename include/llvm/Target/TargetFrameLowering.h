@@ -158,20 +158,6 @@ public:
     return false;
   }
 
-  //==========================================================================//
-  virtual bool useXderef() const {
-    return false;
-  }
-  virtual unsigned getAddrSpace(const MachineFunction &MF, int FI) const {
-    assert(useXderef());
-    return 0;
-  }
-  virtual int getOffset(const MachineFunction &MF, int FI) const {
-    assert(useXderef());
-    return 0;
-  }
-  //==========================================================================//
-
   /// emitProlog/emitEpilog - These methods insert prolog and epilog code into
   /// the function.
   virtual void emitPrologue(MachineFunction &MF,

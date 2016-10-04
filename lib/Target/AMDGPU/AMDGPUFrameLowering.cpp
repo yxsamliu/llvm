@@ -102,19 +102,3 @@ int AMDGPUFrameLowering::getFrameIndexReference(const MachineFunction &MF,
   return OffsetBytes / (getStackWidth(MF) * 4);
 }
 
-//==========================================================================//
-bool AMDGPUFrameLowering::useXderef() const {
-  // Do we always want to use xderef?
-  // Or maybe for any particular frame indices?
-  return true;
-}
-unsigned AMDGPUFrameLowering::getAddrSpace(const MachineFunction &MF, int FI) const {
-  // By default we always return private address space.
-  // TODO: possibly come up with values shared by compiler and tools.
-  return 0;
-}
-int AMDGPUFrameLowering::getOffset(const MachineFunction &MF, int FI) const {
-  return MF.getFrameInfo().getObjectOffset(FI);
-}
-//==========================================================================//
-

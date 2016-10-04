@@ -14,7 +14,6 @@
 #ifndef LLVM_IR_DEBUGINFOMETADATA_H
 #define LLVM_IR_DEBUGINFOMETADATA_H
 
-#include "llvm/IR/Constants.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/Support/Dwarf.h"
 #include "llvm/ADT/BitmaskEnum.h"
@@ -756,11 +755,6 @@ public:
     if (auto *C = cast_or_null<ConstantAsMetadata>(getExtraData()))
       return C->getValue();
     return nullptr;
-  }
-  unsigned getAddrSpace() const {
-    if (auto *C = cast_or_null<ConstantAsMetadata>(getExtraData()))
-      return cast<ConstantInt>(C->getValue())->getZExtValue();
-    return 0;
   }
   /// @}
 

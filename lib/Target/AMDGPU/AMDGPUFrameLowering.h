@@ -39,12 +39,6 @@ public:
   bool hasFP(const MachineFunction &MF) const override {
     return false;
   }
-
-  //==========================================================================//
-  bool useXderef() const override;
-  unsigned getAddrSpace(const MachineFunction &MF, int FI) const override;
-  int getOffset(const MachineFunction &MF, int FI) const override;
-  //==========================================================================//
 };
 } // namespace llvm
 #endif

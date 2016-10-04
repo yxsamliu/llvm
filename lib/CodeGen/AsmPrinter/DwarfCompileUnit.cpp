@@ -516,14 +516,8 @@ DIE *DwarfCompileUnit::constructVariableDIEImpl(const DbgVariable &DV,
     const TargetFrameLowering *TFI = Asm->MF->getSubtarget().getFrameLowering();
     int Offset = TFI->getFrameIndexReference(*Asm->MF, FI, FrameReg);
     assert(Expr != DV.getExpression().end() && "Wrong number of expressions");
-    if (TFI->useXderef()) {
-      DwarfExpr.EmitOp(dwarf::DW_OP_fbreg);
-      DwarfExpr.EmitSigned(TFI->getOffset(*Asm->MF, FI));
-      DwarfExpr.EmitOp(dwarf::DW_OP_deref);
-    } else {
-      DwarfExpr.AddMachineRegIndirect(*Asm->MF->getSubtarget().getRegisterInfo(),
-                                      FrameReg, Offset);
-    }
+    DwarfExpr.AddMachineRegIndirect(*Asm->MF->getSubtarget().getRegisterInfo(),
+                                    FrameReg, Offset);
     DwarfExpr.AddExpression((*Expr)->expr_op_begin(), (*Expr)->expr_op_end());
     ++Expr;
   }
