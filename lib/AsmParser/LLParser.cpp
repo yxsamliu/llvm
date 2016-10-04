@@ -3425,6 +3425,10 @@ struct ColumnField : public MDUnsignedField {
   ColumnField() : MDUnsignedField(0, UINT16_MAX) {}
 };
 
+struct AddressSpaceField : public MDUnsignedField {
+  AddressSpaceField() : MDUnsignedField(0, UINT32_MAX) {}
+};
+
 struct DwarfTagField : public MDUnsignedField {
   DwarfTagField() : MDUnsignedField(0, dwarf::DW_TAG_hi_user) {}
   DwarfTagField(dwarf::Tag DefaultTag)
@@ -3521,6 +3525,12 @@ bool LLParser::ParseMDField(LocTy Loc, StringRef Name, LineField &Result) {
 }
 template <>
 bool LLParser::ParseMDField(LocTy Loc, StringRef Name, ColumnField &Result) {
+  return ParseMDField(Loc, Name, static_cast<MDUnsignedField &>(Result));
+}
+
+template <>
+bool LLParser::ParseMDField(LocTy Loc, StringRef Name,
+                            AddressSpaceField &Result) {
   return ParseMDField(Loc, Name, static_cast<MDUnsignedField &>(Result));
 }
 
@@ -4228,9 +4238,9 @@ bool LLParser::ParseDITemplateValueParameter(MDNode *&Result, bool IsDistinct) {
 
 /// ParseDIGlobalVariable:
 ///   ::= !DIGlobalVariable(scope: !0, name: "foo", linkageName: "foo",
-///                         file: !1, line: 7, type: !2, isLocal: false,
-///                         isDefinition: true, variable: i32* @foo,
-///                         declaration: !3)
+///                         file: !1, line: 7, addressSpace: 0, type: !2,
+///                         isLocal: false, isDefinition: true,
+///                         variable: i32* @foo, declaration: !3)
 bool LLParser::ParseDIGlobalVariable(MDNode *&Result, bool IsDistinct) {
 #define VISIT_MD_FIELDS(OPTIONAL, REQUIRED)                                    \
   REQUIRED(name, MDStringField, (/* AllowEmpty */ false));                     \
@@ -4238,6 +4248,7 @@ bool LLParser::ParseDIGlobalVariable(MDNode *&Result, bool IsDistinct) {
   OPTIONAL(linkageName, MDStringField, );                                      \
   OPTIONAL(file, MDField, );                                                   \
   OPTIONAL(line, LineField, );                                                 \
+  OPTIONAL(addressSpace, AddressSpaceField, );                                 \
   OPTIONAL(type, MDField, );                                                   \
   OPTIONAL(isLocal, MDBoolField, );                                            \
   OPTIONAL(isDefinition, MDBoolField, (true));                                 \
@@ -4248,16 +4259,19 @@ bool LLParser::ParseDIGlobalVariable(MDNode *&Result, bool IsDistinct) {
 
   Result = GET_OR_DISTINCT(DIGlobalVariable,
                            (Context, scope.Val, name.Val, linkageName.Val,
-                            file.Val, line.Val, type.Val, isLocal.Val,
-                            isDefinition.Val, expr.Val, declaration.Val));
+                            file.Val, line.Val, addressSpace.Val, type.Val,
+                            isLocal.Val, isDefinition.Val, expr.Val,
+                            declaration.Val));
   return false;
 }
 
 /// ParseDILocalVariable:
 ///   ::= !DILocalVariable(arg: 7, scope: !0, name: "foo",
-///                        file: !1, line: 7, type: !2, arg: 2, flags: 7)
+///                        file: !1, line: 7, addressSpace: 0, type: !2, arg: 2,
+///                        flags: 7)
 ///   ::= !DILocalVariable(scope: !0, name: "foo",
-///                        file: !1, line: 7, type: !2, arg: 2, flags: 7)
+///                        file: !1, line: 7, addressSpace: 0, type: !2, arg: 2,
+///                        flags: 7)
 bool LLParser::ParseDILocalVariable(MDNode *&Result, bool IsDistinct) {
 #define VISIT_MD_FIELDS(OPTIONAL, REQUIRED)                                    \
   REQUIRED(scope, MDField, (/* AllowNull */ false));                           \
@@ -4265,6 +4279,7 @@ bool LLParser::ParseDILocalVariable(MDNode *&Result, bool IsDistinct) {
   OPTIONAL(arg, MDUnsignedField, (0, UINT16_MAX));                             \
   OPTIONAL(file, MDField, );                                                   \
   OPTIONAL(line, LineField, );                                                 \
+  OPTIONAL(addressSpace, AddressSpaceField, );                                 \
   OPTIONAL(type, MDField, );                                                   \
   OPTIONAL(flags, DIFlagField, );
   PARSE_MD_FIELDS();
@@ -4272,7 +4287,7 @@ bool LLParser::ParseDILocalVariable(MDNode *&Result, bool IsDistinct) {
 
   Result = GET_OR_DISTINCT(DILocalVariable,
                            (Context, scope.Val, name.Val, file.Val, line.Val,
-                            type.Val, arg.Val, flags.Val));
+                            addressSpace.Val, type.Val, arg.Val, flags.Val));
   return false;
 }
 

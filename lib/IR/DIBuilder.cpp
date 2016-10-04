@@ -210,7 +210,14 @@ DIDerivedType *DIBuilder::createQualifiedType(unsigned Tag, DIType *FromTy) {
 DIDerivedType *DIBuilder::createPointerType(DIType *PointeeTy,
                                             uint64_t SizeInBits,
                                             uint64_t AlignInBits,
+                                            unsigned AddrSpace,
                                             StringRef Name) {
+  ConstantAsMetadata *AddrSpaceMD = nullptr;
+  if (AddrSpace != 0) {
+    Type *I32Ty = Type::getInt32Ty(VMContext);
+    AddrSpaceMD = ConstantAsMetadata::get(ConstantInt::get(I32Ty, AddrSpace));
+  }
+
   // FIXME: Why is there a name here?
   return DIDerivedType::get(VMContext, dwarf::DW_TAG_pointer_type, Name,
                             nullptr, 0, nullptr, PointeeTy, SizeInBits,
@@ -535,13 +542,13 @@ static void checkGlobalVariableScope(DIScope *Context) {
 
 DIGlobalVariable *DIBuilder::createGlobalVariable(
     DIScope *Context, StringRef Name, StringRef LinkageName, DIFile *F,
-    unsigned LineNumber, DIType *Ty, bool isLocalToUnit, DIExpression *Expr,
-    MDNode *Decl) {
+    unsigned LineNumber, unsigned AddressSpace, DIType *Ty, bool isLocalToUnit,
+    DIExpression *Expr, MDNode *Decl) {
   checkGlobalVariableScope(Context);
 
   auto *N = DIGlobalVariable::getDistinct(
       VMContext, cast_or_null<DIScope>(Context), Name, LinkageName, F,
-      LineNumber, Ty, isLocalToUnit, true, Expr,
+      LineNumber, AddressSpace, Ty, isLocalToUnit, true, Expr,
       cast_or_null<DIDerivedType>(Decl));
   AllGVs.push_back(N);
   return N;
@@ -549,13 +556,13 @@ DIGlobalVariable *DIBuilder::createGlobalVariable(
 
 DIGlobalVariable *DIBuilder::createTempGlobalVariableFwdDecl(
     DIScope *Context, StringRef Name, StringRef LinkageName, DIFile *F,
-    unsigned LineNumber, DIType *Ty, bool isLocalToUnit, DIExpression *Expr,
-    MDNode *Decl) {
+    unsigned LineNumber, unsigned AddressSpace, DIType *Ty, bool isLocalToUnit,
+    DIExpression *Expr, MDNode *Decl) {
   checkGlobalVariableScope(Context);
 
   return DIGlobalVariable::getTemporary(
              VMContext, cast_or_null<DIScope>(Context), Name, LinkageName, F,
-             LineNumber, Ty, isLocalToUnit, false, Expr,
+             LineNumber, AddressSpace, Ty, isLocalToUnit, false, Expr,
              cast_or_null<DIDerivedType>(Decl))
       .release();
 }
@@ -564,7 +571,8 @@ static DILocalVariable *createLocalVariable(
     LLVMContext &VMContext,
     DenseMap<MDNode *, SmallVector<TrackingMDNodeRef, 1>> &PreservedVariables,
     DIScope *Scope, StringRef Name, unsigned ArgNo, DIFile *File,
-    unsigned LineNo, DIType *Ty, bool AlwaysPreserve, DINode::DIFlags Flags) {
+    unsigned LineNo, unsigned AddressSpace, DIType *Ty, bool AlwaysPreserve,
+    DINode::DIFlags Flags) {
   // FIXME: Why getNonCompileUnitScope()?
   // FIXME: Why is "!Context" okay here?
   // FIXME: Why doesn't this check for a subprogram or lexical block (AFAICT
@@ -573,7 +581,7 @@ static DILocalVariable *createLocalVariable(
 
   auto *Node =
       DILocalVariable::get(VMContext, cast_or_null<DILocalScope>(Context), Name,
-                           File, LineNo, Ty, ArgNo, Flags);
+                           File, LineNo, AddressSpace, Ty, ArgNo, Flags);
   if (AlwaysPreserve) {
     // The optimizer may remove local variables. If there is an interest
     // to preserve variable info in such situation then stash it in a
@@ -587,19 +595,22 @@ static DILocalVariable *createLocalVariable(
 
 DILocalVariable *DIBuilder::createAutoVariable(DIScope *Scope, StringRef Name,
                                                DIFile *File, unsigned LineNo,
+                                               unsigned AddressSpace,
                                                DIType *Ty, bool AlwaysPreserve,
                                                DINode::DIFlags Flags) {
   return createLocalVariable(VMContext, PreservedVariables, Scope, Name,
-                             /* ArgNo */ 0, File, LineNo, Ty, AlwaysPreserve,
-                             Flags);
+                             /* ArgNo */ 0, File, LineNo, AddressSpace, Ty,
+                             AlwaysPreserve, Flags);
 }
 
 DILocalVariable *DIBuilder::createParameterVariable(
     DIScope *Scope, StringRef Name, unsigned ArgNo, DIFile *File,
-    unsigned LineNo, DIType *Ty, bool AlwaysPreserve, DINode::DIFlags Flags) {
+    unsigned LineNo, unsigned AddressSpace, DIType *Ty, bool AlwaysPreserve,
+    DINode::DIFlags Flags) {
   assert(ArgNo && "Expected non-zero argument number for parameter");
   return createLocalVariable(VMContext, PreservedVariables, Scope, Name, ArgNo,
-                             File, LineNo, Ty, AlwaysPreserve, Flags);
+                             File, LineNo, AddressSpace, Ty, AlwaysPreserve,
+                             Flags);
 }
 
 DIExpression *DIBuilder::createExpression(ArrayRef<uint64_t> Addr) {

@@ -257,7 +257,7 @@ protected:
         DBuilder.createBasicType("int", 32, 0, dwarf::DW_ATE_signed);
     auto *E = DBuilder.createExpression();
     auto *Variable =
-        DBuilder.createAutoVariable(Subprogram, "x", File, 5, IntType, true);
+        DBuilder.createAutoVariable(Subprogram, "x", File, 5, 0, IntType, true);
     auto *DL = DILocation::get(Subprogram->getContext(), 5, 0, Subprogram);
     DBuilder.insertDeclare(Alloca, Variable, E, DL, Store);
     DBuilder.insertDbgValueIntrinsic(AllocaContent, 0, Variable, E, DL,

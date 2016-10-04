@@ -135,9 +135,11 @@ namespace llvm {
     /// \param PointeeTy   Type pointed by this pointer.
     /// \param SizeInBits  Size.
     /// \param AlignInBits Alignment. (optional)
+    /// \param AddressSpace Address space. (optional)
     /// \param Name        Pointer type name. (optional)
     DIDerivedType *createPointerType(DIType *PointeeTy, uint64_t SizeInBits,
                                      uint64_t AlignInBits = 0,
+                                     unsigned AddressSpace = 0,
                                      StringRef Name = "");
 
     /// Create debugging information entry for a pointer to member.
@@ -446,20 +448,22 @@ namespace llvm {
 
     /// Create a new descriptor for the specified
     /// variable.
-    /// \param Context     Variable scope.
-    /// \param Name        Name of the variable.
-    /// \param LinkageName Mangled  name of the variable.
-    /// \param File        File where this variable is defined.
-    /// \param LineNo      Line number.
-    /// \param Ty          Variable Type.
+    /// \param Context       Variable scope.
+    /// \param Name          Name of the variable.
+    /// \param LinkageName   Mangled  name of the variable.
+    /// \param File          File where this variable is defined.
+    /// \param LineNo        Line number.
+    /// \param AddressSpace  Variable address space.
+    /// \param Ty            Variable Type.
     /// \param isLocalToUnit Boolean flag indicate whether this variable is
     ///                      externally visible or not.
-    /// \param Expr        The location of the global relative to the attached
-    ///                    GlobalVariable.
-    /// \param Decl        Reference to the corresponding declaration.
+    /// \param Expr          The location of the global relative to the attached
+    ///                      GlobalVariable.
+    /// \param Decl          Reference to the corresponding declaration.
     DIGlobalVariable *createGlobalVariable(DIScope *Context, StringRef Name,
                                            StringRef LinkageName, DIFile *File,
-                                           unsigned LineNo, DIType *Ty,
+                                           unsigned LineNo,
+                                           unsigned AddressSpace, DIType *Ty,
                                            bool isLocalToUnit,
                                            DIExpression *Expr = nullptr,
                                            MDNode *Decl = nullptr);
@@ -468,8 +472,8 @@ namespace llvm {
     /// except that the resulting DbgNode is temporary and meant to be RAUWed.
     DIGlobalVariable *createTempGlobalVariableFwdDecl(
         DIScope *Context, StringRef Name, StringRef LinkageName, DIFile *File,
-        unsigned LineNo, DIType *Ty, bool isLocalToUnit, DIExpression *Expr,
-        MDNode *Decl = nullptr);
+        unsigned LineNo, unsigned AddressSpace, DIType *Ty, bool isLocalToUnit,
+        DIExpression *Expr, MDNode *Decl = nullptr);
 
     /// Create a new descriptor for an auto variable.  This is a local variable
     /// that is not a subprogram parameter.
@@ -481,7 +485,8 @@ namespace llvm {
     /// containing subprogram, and will survive some optimizations.
     DILocalVariable *
     createAutoVariable(DIScope *Scope, StringRef Name, DIFile *File,
-                       unsigned LineNo, DIType *Ty, bool AlwaysPreserve = false,
+                       unsigned LineNo, unsigned AddressSpace, DIType *Ty,
+                       bool AlwaysPreserve = false,
                        DINode::DIFlags Flags = DINode::FlagZero);
 
     /// Create a new descriptor for a parameter variable.
@@ -497,7 +502,8 @@ namespace llvm {
     /// containing subprogram, and will survive some optimizations.
     DILocalVariable *
     createParameterVariable(DIScope *Scope, StringRef Name, unsigned ArgNo,
-                            DIFile *File, unsigned LineNo, DIType *Ty,
+                            DIFile *File, unsigned LineNo,
+                            unsigned AddressSpace, DIType *Ty,
                             bool AlwaysPreserve = false,
                             DINode::DIFlags Flags = DINode::FlagZero);
 

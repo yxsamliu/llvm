@@ -756,6 +756,7 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
   MDString *LinkageName;
   Metadata *File;
   unsigned Line;
+  unsigned AddressSpace;
   Metadata *Type;
   bool IsLocalToUnit;
   bool IsDefinition;
@@ -763,25 +764,26 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
   Metadata *StaticDataMemberDeclaration;
 
   MDNodeKeyImpl(Metadata *Scope, MDString *Name, MDString *LinkageName,
-                Metadata *File, unsigned Line, Metadata *Type,
-                bool IsLocalToUnit, bool IsDefinition, Metadata *Expr,
-                Metadata *StaticDataMemberDeclaration)
+                Metadata *File, unsigned Line, unsigned AddressSpace,
+                Metadata *Type, bool IsLocalToUnit, bool IsDefinition,
+                Metadata *Expr, Metadata *StaticDataMemberDeclaration)
       : Scope(Scope), Name(Name), LinkageName(LinkageName), File(File),
-        Line(Line), Type(Type), IsLocalToUnit(IsLocalToUnit),
-        IsDefinition(IsDefinition), Expr(Expr),
+        Line(Line), AddressSpace(AddressSpace), Type(Type),
+        IsLocalToUnit(IsLocalToUnit), IsDefinition(IsDefinition), Expr(Expr),
         StaticDataMemberDeclaration(StaticDataMemberDeclaration) {}
   MDNodeKeyImpl(const DIGlobalVariable *N)
       : Scope(N->getRawScope()), Name(N->getRawName()),
         LinkageName(N->getRawLinkageName()), File(N->getRawFile()),
-        Line(N->getLine()), Type(N->getRawType()),
-        IsLocalToUnit(N->isLocalToUnit()), IsDefinition(N->isDefinition()),
-        Expr(N->getRawExpr()),
+        Line(N->getLine()), AddressSpace(N->getAddressSpace()),
+        Type(N->getRawType()), IsLocalToUnit(N->isLocalToUnit()),
+        IsDefinition(N->isDefinition()), Expr(N->getRawExpr()),
         StaticDataMemberDeclaration(N->getRawStaticDataMemberDeclaration()) {}
 
   bool isKeyOf(const DIGlobalVariable *RHS) const {
     return Scope == RHS->getRawScope() && Name == RHS->getRawName() &&
            LinkageName == RHS->getRawLinkageName() &&
            File == RHS->getRawFile() && Line == RHS->getLine() &&
+           AddressSpace == RHS->getAddressSpace() &&
            Type == RHS->getRawType() && IsLocalToUnit == RHS->isLocalToUnit() &&
            IsDefinition == RHS->isDefinition() &&
            Expr == RHS->getRawExpr() &&
@@ -789,8 +791,8 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
                RHS->getRawStaticDataMemberDeclaration();
   }
   unsigned getHashValue() const {
-    return hash_combine(Scope, Name, LinkageName, File, Line, Type,
-                        IsLocalToUnit, IsDefinition, Expr,
+    return hash_combine(Scope, Name, LinkageName, File, Line, AddressSpace,
+                        Type, IsLocalToUnit, IsDefinition, Expr,
                         StaticDataMemberDeclaration);
   }
 };
@@ -800,27 +802,31 @@ template <> struct MDNodeKeyImpl<DILocalVariable> {
   MDString *Name;
   Metadata *File;
   unsigned Line;
+  unsigned AddressSpace;
   Metadata *Type;
   unsigned Arg;
   unsigned Flags;
 
   MDNodeKeyImpl(Metadata *Scope, MDString *Name, Metadata *File, unsigned Line,
-                Metadata *Type, unsigned Arg, unsigned Flags)
-      : Scope(Scope), Name(Name), File(File), Line(Line), Type(Type), Arg(Arg),
-        Flags(Flags) {}
+                unsigned AddressSpace, Metadata *Type, unsigned Arg,
+                unsigned Flags)
+      : Scope(Scope), Name(Name), File(File), Line(Line),
+        AddressSpace(AddressSpace), Type(Type), Arg(Arg), Flags(Flags) {}
   MDNodeKeyImpl(const DILocalVariable *N)
       : Scope(N->getRawScope()), Name(N->getRawName()), File(N->getRawFile()),
-        Line(N->getLine()), Type(N->getRawType()), Arg(N->getArg()),
-        Flags(N->getFlags()) {}
+        Line(N->getLine()), AddressSpace(N->getAddressSpace()),
+        Type(N->getRawType()), Arg(N->getArg()), Flags(N->getFlags()) {}
 
   bool isKeyOf(const DILocalVariable *RHS) const {
     return Scope == RHS->getRawScope() && Name == RHS->getRawName() &&
            File == RHS->getRawFile() && Line == RHS->getLine() &&
+           AddressSpace == RHS->getAddressSpace() &&
            Type == RHS->getRawType() && Arg == RHS->getArg() &&
            Flags == RHS->getFlags();
   }
   unsigned getHashValue() const {
-    return hash_combine(Scope, Name, File, Line, Type, Arg, Flags);
+    return hash_combine(Scope, Name, File, Line, AddressSpace, Type, Arg,
+                        Flags);
   }
 };
 

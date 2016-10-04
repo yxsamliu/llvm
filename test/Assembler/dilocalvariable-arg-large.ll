@@ -14,7 +14,7 @@
                              splitDebugFilename: "abc.debug", emissionKind: 2)
 !2 = !DIFile(filename: "path/to/file", directory: "/path/to/dir")
 
-; CHECK: !3 = !DILocalVariable(name: "foo", arg: 65535, scope: !0)
+; CHECK: !3 = !DILocalVariable(name: "foo", arg: 65535, scope: !0, addressSpace: 0)
 !3 = !DILocalVariable(name: "foo", arg: 65535, scope: !0)
 
 !4 = !{i32 2, !"Debug Info Version", i32 3}

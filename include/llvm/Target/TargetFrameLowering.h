@@ -139,6 +139,16 @@ public:
     return nullptr;
   }
 
+  /// targetUsesAddressSpace - Returns true if target uses address spaces.
+  virtual bool targetUsesAddressSpace() const {
+    return false;
+  }
+
+  virtual int getFrameIndexOffset(const MachineFunction &MF, int FI) const {
+    assert(targetUsesAddressSpace());
+    return 0;
+  }
+
   /// targetHandlesStackFrameRounding - Returns true if the target is
   /// responsible for rounding up the stack frame (probably at emitPrologue
   /// time).

@@ -507,27 +507,29 @@ DITemplateValueParameter *DITemplateValueParameter::getImpl(
 DIGlobalVariable *
 DIGlobalVariable::getImpl(LLVMContext &Context, Metadata *Scope, MDString *Name,
                           MDString *LinkageName, Metadata *File, unsigned Line,
-                          Metadata *Type, bool IsLocalToUnit, bool IsDefinition,
+                          unsigned AddressSpace, Metadata *Type,
+                          bool IsLocalToUnit, bool IsDefinition,
                           Metadata *Variable,
                           Metadata *StaticDataMemberDeclaration,
                           StorageType Storage, bool ShouldCreate) {
   assert(isCanonical(Name) && "Expected canonical MDString");
   assert(isCanonical(LinkageName) && "Expected canonical MDString");
   DEFINE_GETIMPL_LOOKUP(DIGlobalVariable,
-                        (Scope, Name, LinkageName, File, Line, Type,
-                         IsLocalToUnit, IsDefinition, Variable,
+                        (Scope, Name, LinkageName, File, Line, AddressSpace,
+                         Type, IsLocalToUnit, IsDefinition, Variable,
                          StaticDataMemberDeclaration));
   Metadata *Ops[] = {Scope, Name,        File,     Type,
                      Name,  LinkageName, Variable, StaticDataMemberDeclaration};
-  DEFINE_GETIMPL_STORE(DIGlobalVariable, (Line, IsLocalToUnit, IsDefinition),
+  DEFINE_GETIMPL_STORE(DIGlobalVariable, (Line, AddressSpace, IsLocalToUnit,
+                                          IsDefinition),
                        Ops);
 }
 
 DILocalVariable *DILocalVariable::getImpl(LLVMContext &Context, Metadata *Scope,
                                           MDString *Name, Metadata *File,
-                                          unsigned Line, Metadata *Type,
-                                          unsigned Arg, DIFlags Flags,
-                                          StorageType Storage,
+                                          unsigned Line, unsigned AddressSpace,
+                                          Metadata *Type, unsigned Arg,
+                                          DIFlags Flags, StorageType Storage,
                                           bool ShouldCreate) {
   // 64K ought to be enough for any frontend.
   assert(Arg <= UINT16_MAX && "Expected argument number to fit in 16-bits");
@@ -535,9 +537,10 @@ DILocalVariable *DILocalVariable::getImpl(LLVMContext &Context, Metadata *Scope,
   assert(Scope && "Expected scope");
   assert(isCanonical(Name) && "Expected canonical MDString");
   DEFINE_GETIMPL_LOOKUP(DILocalVariable,
-                        (Scope, Name, File, Line, Type, Arg, Flags));
+                        (Scope, Name, File, Line, AddressSpace, Type, Arg,
+                         Flags));
   Metadata *Ops[] = {Scope, Name, File, Type};
-  DEFINE_GETIMPL_STORE(DILocalVariable, (Line, Arg, Flags), Ops);
+  DEFINE_GETIMPL_STORE(DILocalVariable, (Line, AddressSpace, Arg, Flags), Ops);
 }
 
 DIExpression *DIExpression::getImpl(LLVMContext &Context,
