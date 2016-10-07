@@ -1025,6 +1025,29 @@ void updateSELWithNewOperand(SelectInst * SEL, Value * oldOperand, Value * newOp
       updateListWithUsers(SEL->user_begin(), SEL->user_end(), SEL, SEL, updatesNeeded);
 }
 
+void updateAtomicRMWWithNewOperand(AtomicRMWInst *ARMWI, Value * oldOperand, Value * newOperand, InstUpdateWorkList * updatesNeeded)
+{
+    DEBUG(llvm::errs() << "=== BEFORE UPDATE AtomicRMW ===\n";
+    llvm::errs() << "ARMWI: "; ARMWI->dump(); llvm::errs() << "\n";
+    llvm::errs() << "ARMWI pointer operand: "; ARMWI->getPointerOperand()->dump(); llvm::errs() << "\n";
+    llvm::errs() << "ARMWI value operand: "; ARMWI->getValOperand()->dump(); llvm::errs() << "\n";
+    llvm::errs() << "oldOperand: "; oldOperand->dump(); llvm::errs() << "\n";
+    llvm::errs() << "newOperand: "; newOperand->dump(); llvm::errs() << "\n";);
+
+    bool update = false;
+
+    if (ARMWI->getPointerOperand() == oldOperand) {
+      ARMWI->setOperand(AtomicRMWInst::getPointerOperandIndex(), newOperand);
+      update = true;
+    }
+
+    DEBUG(llvm::errs() << "=== AFTER UPDATE AtomicRMW ===\n";
+    llvm::errs() << "ARMWI: "; ARMWI->dump(); llvm::errs() << "\n";);
+
+    if (update)
+      updateListWithUsers(ARMWI->user_begin(), ARMWI->user_end(), ARMWI, ARMWI, updatesNeeded);
+}
+
 bool CheckCalledFunction ( CallInst * CI, InstUpdateWorkList * updates,
                            FunctionType *& newFunctionType )
 {
@@ -1125,38 +1148,17 @@ void CollectChangedCalledFunctions (Function * F, InstUpdateWorkList * updatesNe
         }
 }
 
-// HSA-specific : memory scope for atomic operations
-//
-// For atomic instructions (load atomic, store atomic, atomicrmw, cmpxchg, fence),
-// add !mem.scope metadata to specify its memory scope, which is required in HSAIL.
-// Since there is no way to specify memory scope in C++ atomic operations <atomic>
-// yet, we set default memory scope as: _sys_ (5)
-void appendMemoryScopeMetadata(Instruction *I) {
-  // set default memory scope as: _sys_ (5)
-  ConstantInt *C = ConstantInt::get(Type::getInt32Ty(I->getContext()), 5);
-  MDTuple *MD = MDTuple::get(I->getContext(), ConstantAsMetadata::get(C));
-  I->setMetadata("mem.scope", MD);
-}
-
 void updateInstructionWithNewOperand(Instruction * I,
                                      Value * oldOperand,
                                      Value * newOperand,
                                      InstUpdateWorkList * updatesNeeded)
 {
        if (LoadInst * LI = dyn_cast<LoadInst>(I)) {
-               if (LI->isAtomic()) {
-                 appendMemoryScopeMetadata(I);
-               }
-
                updateLoadInstWithNewOperand(LI, newOperand, updatesNeeded);
                return;
        }
 
        if (StoreInst * SI = dyn_cast<StoreInst>(I)) {
-               if (SI->isAtomic()) {
-                 appendMemoryScopeMetadata(I);
-               }
-
                updateStoreInstWithNewOperand(SI, oldOperand, newOperand, updatesNeeded);
                return;
        }
@@ -1212,8 +1214,13 @@ void updateInstructionWithNewOperand(Instruction * I,
            return;
        }
 
-       if (isa<AtomicRMWInst>(I) || isa<AtomicCmpXchgInst>(I) || isa<FenceInst>(I)) {
-           appendMemoryScopeMetadata(I);
+       if (AtomicRMWInst *ARMWI = dyn_cast<AtomicRMWInst>(I)) {
+           updateAtomicRMWWithNewOperand(ARMWI, oldOperand, newOperand, updatesNeeded);
+           return;
+       }
+
+       if (isa<AtomicCmpXchgInst>(I) || isa<FenceInst>(I)) {
+           DEBUG(llvm::errs() << "AtomicCmpXchgInst and FenceInst may need to be updated\n";);
            return;
        }
 
