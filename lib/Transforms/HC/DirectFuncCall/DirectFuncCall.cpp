@@ -55,10 +55,14 @@ namespace {
           } // !F->hasNUses > 0
 
           // host side does not need the function definition of a grid_launch kernel
-          // deleting the function body can help resolve linking errors
+          // mark the function to have internal linkage
+          // we can not delete it because sometimes the function may be in
+          // a Comdat, and deleting the function body would make it a
+          // declaration, which violates the rule of for Comdat
           if(HostSpecific) {
-            if(F->size() > 0)
-              F->deleteBody();
+            if(F->size() > 0) {
+              F->setLinkage(GlobalValue::InternalLinkage);
+            }
           }
         } // F->hasFnAttribute(HCGridLaunchAttr)
       } // Module::iterator
