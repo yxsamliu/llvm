@@ -853,6 +853,8 @@ void updateBitCastInstWithNewOperand(BitCastInst * BI, Value *oldOperand, Value 
         Type *elementType = currentPtrType->getElementType();
         if (StructType *ST = dyn_cast<StructType>(elementType)) {
           elementType = mapTypeToGlobal(ST);
+        } else if (PointerType *PT = dyn_cast<PointerType>(elementType)) {
+          elementType = mapTypeToGlobal(PT);
         }
 
         Type * sourceType = newOperand->getType();
