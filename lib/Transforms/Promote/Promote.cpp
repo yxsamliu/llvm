@@ -913,21 +913,29 @@ void updateGEPWithNewOperand(GetElementPtrInst * GEP, Value * oldOperand, Value 
         llvm::errs() << "new operand: "; newOperand->dump(); llvm::errs() << "\n";
         llvm::errs() << "new operand type: "; newOperand->getType()->dump(); llvm::errs() << "\n";);
 
-        if ( GEP->getPointerOperand() != oldOperand ) return;
+        if ( GEP->getPointerOperand() != oldOperand ) {
+          DEBUG(llvm::errs() << "update GEP early return #1\n";);
+          return;
+        }
 
         std::vector<Value *> Indices(GEP->idx_begin(), GEP->idx_end());
 
         Type * futureType =
         GEP->getGEPReturnType(newOperand, ArrayRef<Value *>(Indices));
-
         PointerType * futurePtrType = dyn_cast<PointerType>(futureType);
-        if ( !futurePtrType ) return;
-
-        GEP->setOperand (GEP->getPointerOperandIndex(), newOperand);
-        if ( futurePtrType == GEP->getType()) return;
+        if ( !futurePtrType ) {
+          DEBUG(llvm::errs() << "update GEP early return #2\n";);
+          return;
+        }
 
         Type* PointeeType = cast<PointerType>(newOperand->getType()->getScalarType())->getElementType();
-        if (!PointeeType) return;
+        if (!PointeeType) {
+          DEBUG(llvm::errs() << "early return #3\n";);
+          return;
+        }
+
+        // update GEP pointer operand
+        GEP->setOperand (GEP->getPointerOperandIndex(), newOperand);
 
         // update GEP return type
         GEP->mutateType(futurePtrType);
