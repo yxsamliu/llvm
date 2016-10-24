@@ -1722,14 +1722,14 @@ Function * createPromotedFunctionToType ( Function * F, FunctionType * promoteTy
 
         eraseOldTileStaticDefs(F->getParent());
 
-        // don't verify the new function if it is only a declaration
+        DEBUG(// don't verify the new function if it is only a declaration
         if (!newFunction->isDeclaration() && verifyFunction (*newFunction/*, PrintMessageAction*/)) {
                 llvm::errs() << "When checking the updated function of: ";
                 F->dump();
                 llvm::errs() << " into: ";
                 newFunction->dump();
         }
-        DEBUG(llvm::errs() << "-------------------------------------------";);
+        llvm::errs() << "-------------------------------------------";);
         return newFunction;
 }
 
