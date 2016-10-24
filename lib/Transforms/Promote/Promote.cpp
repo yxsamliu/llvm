@@ -904,25 +904,24 @@ void updateAddrSpaceCastInstWithNewOperand(AddrSpaceCastInst * AI, Value *oldOpe
 void updateGEPWithNewOperand(GetElementPtrInst * GEP, Value * oldOperand, Value * newOperand, InstUpdateWorkList * updatesNeeded)
 {
         DEBUG(llvm::errs() << "=== BEFORE UPDATE GEP ===\n";
-        llvm::errs() << "new operand: "; newOperand->getType()->dump(); llvm::errs() << "\n";);
+        llvm::errs() << "GEP: "; GEP->dump(); llvm::errs() << "\n";
+        llvm::errs() << "GEP type: "; GEP->getType()->dump(); llvm::errs() << "\n";
+        llvm::errs() << "GEP src element type: "; GEP->getSourceElementType()->dump(); llvm::errs() << "\n";
+        llvm::errs() << "GEP result element type: "; GEP->getResultElementType()->dump(); llvm::errs() << "\n";
+        llvm::errs() << "old operand: "; oldOperand->dump(); llvm::errs() << "\n";
+        llvm::errs() << "old operand type: "; oldOperand->getType()->dump(); llvm::errs() << "\n";
+        llvm::errs() << "new operand: "; newOperand->dump(); llvm::errs() << "\n";
+        llvm::errs() << "new operand type: "; newOperand->getType()->dump(); llvm::errs() << "\n";);
 
         if ( GEP->getPointerOperand() != oldOperand ) return;
 
         std::vector<Value *> Indices(GEP->idx_begin(), GEP->idx_end());
-#if 0
-        Type* basisType = newOperand->getType()->getPointerElementType();
-        GetElementPtrInst* newGEPI = GetElementPtrInst::Create(basisType, newOperand, Indices, "", GEP);
-        DEBUG(newGEPI->dump(); llvm::errs() << "\n";);
-        updateListWithUsers(GEP->user_begin(), GEP->user_end(), GEP, newGEPI, updatesNeeded);
-#else
+
         Type * futureType =
         GEP->getGEPReturnType(newOperand, ArrayRef<Value *>(Indices));
 
         PointerType * futurePtrType = dyn_cast<PointerType>(futureType);
         if ( !futurePtrType ) return;
-
-        // Must replace with new GEP to handle such case
-        // %26 = getelementptr inbounds %"class.Concurrency::graphics::unorm", %@"class.Concurrency::graphics::unorm.0" addrespace(1) %25, i64 0, i64 %25
 
         GEP->setOperand (GEP->getPointerOperandIndex(), newOperand);
         if ( futurePtrType == GEP->getType()) return;
@@ -930,11 +929,27 @@ void updateGEPWithNewOperand(GetElementPtrInst * GEP, Value * oldOperand, Value 
         Type* PointeeType = cast<PointerType>(newOperand->getType()->getScalarType())->getElementType();
         if (!PointeeType) return;
 
-        GetElementPtrInst* newGEP = GetElementPtrInst::Create(PointeeType, newOperand,
-                SmallVector<Value *, 8>(GEP->idx_begin(), GEP->idx_end()), GEP->getName(), GEP);
-        newGEP->setIsInBounds(GEP->isInBounds());
-        updateListWithUsers(GEP->user_begin(), GEP->user_end(), GEP, newGEP, updatesNeeded);
-#endif
+        // update GEP return type
+        GEP->mutateType(futurePtrType);
+
+        // update GEP source element type
+        GEP->setSourceElementType(PointeeType);
+
+        // update GEP result element type
+        // FIXME: this may not be the best solution
+        GEP->setResultElementType(futurePtrType->getElementType());
+
+        DEBUG(llvm::errs() << "=== AFTER UPDATE GEP ===\n";
+        llvm::errs() << "GEP: "; GEP->dump(); llvm::errs() << "\n";
+        llvm::errs() << "GEP type: "; GEP->getType()->dump(); llvm::errs() << "\n";
+        llvm::errs() << "GEP src element type: "; GEP->getSourceElementType()->dump(); llvm::errs() << "\n";
+        llvm::errs() << "GEP result element type: "; GEP->getResultElementType()->dump(); llvm::errs() << "\n";
+        llvm::errs() << "old operand: "; oldOperand->dump(); llvm::errs() << "\n";
+        llvm::errs() << "old operand type: "; oldOperand->getType()->dump(); llvm::errs() << "\n";
+        llvm::errs() << "new operand: "; newOperand->dump(); llvm::errs() << "\n";
+        llvm::errs() << "new operand type: "; newOperand->getType()->dump(); llvm::errs() << "\n";);
+
+        updateListWithUsers(GEP->user_begin(), GEP->user_end(), GEP, GEP, updatesNeeded);
 }
 
 void updateCMPWithNewOperand(CmpInst *CMP, Value *oldOperand, Value *newOperand, InstUpdateWorkList *updatesNeeded)
