@@ -862,33 +862,44 @@ void updateCallInstWithNewOperand(CallInst * CI, Value * oldOperand, Value * new
         }
 }
 
+static Type *ReMapPointerTypeAccordingToAddressSpace(Type *LHS, Type *RHS) {
+  DEBUG(llvm::errs() << "LHS: "; LHS->dump();
+  llvm::errs() << "RHS: "; RHS->dump(););
+
+  Type *T = nullptr;
+  if (PointerType *LPT = dyn_cast<PointerType>(LHS)) {
+    PointerType *RPT = dyn_cast<PointerType>(RHS);
+    assert(RPT);
+    T = PointerType::get( ReMapPointerTypeAccordingToAddressSpace(LPT->getElementType(), RPT->getElementType()),
+                          LPT->getAddressSpace() );
+  } else {
+    T = mapTypeToGlobal(RHS);
+  }
+  DEBUG(llvm::errs() << "return: "; T->dump(););
+  return T;
+}
+
 void updateBitCastInstWithNewOperand(BitCastInst * BI, Value *oldOperand, Value * newOperand, InstUpdateWorkList * updatesNeeded)
 {
+        DEBUG(llvm::errs() << "BI: "; BI->dump();
+        llvm::errs() << "BI Type: "; BI->getType()->dump();
+        llvm::errs() << "newOperand: "; newOperand->dump();
+        llvm::errs() << "newOperand Type: "; newOperand->getType()->dump(););
+
         Type * currentType = BI->getType();
         PointerType * currentPtrType = dyn_cast<PointerType>(currentType);
         if (!currentPtrType) return;
 
-        // make sure pointers inside the casted type are also promoted
-        // this fixes an issue when a class has a vtbl gets captured in the kernel,
-        // the size of vtbl would not be correctly calculated
-        Type *elementType = currentPtrType->getElementType();
-        if (StructType *ST = dyn_cast<StructType>(elementType)) {
-          elementType = mapTypeToGlobal(ST);
-        } else if (PointerType *PT = dyn_cast<PointerType>(elementType)) {
-          elementType = mapTypeToGlobal(PT);
-        }
-
-        Type * sourceType = newOperand->getType();
-        PointerType * sourcePtrType = dyn_cast<PointerType>(sourceType);
-        if (!sourcePtrType) return;
-
-        PointerType * newDestType =
-                PointerType::get(elementType,
-                                 sourcePtrType->getAddressSpace());
+        Type *newType = ReMapPointerTypeAccordingToAddressSpace(newOperand->getType(), BI->getType());
+        DEBUG(llvm::errs() << "newType: "; newType->dump(););
+        PointerType *newDestType = dyn_cast<PointerType>(newType);
 
         BitCastInst * newBCI = new BitCastInst (newOperand, newDestType,
                                                 "", BI);
 
+        DEBUG(llvm::errs() << "newBI: "; newBCI->dump();
+        llvm::errs() << "newBI Type: "; newBCI->getType()->dump();
+        llvm::errs() << "newBI address space: " << dyn_cast<PointerType>(newBCI->getType())->getAddressSpace() << "\n";);
         updateListWithUsers (BI->user_begin(), BI->user_end(),
                              BI, newBCI, updatesNeeded);
 }
