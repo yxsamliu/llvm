@@ -796,14 +796,35 @@ void updatePHINodeWithNewOperand(PHINode * I, Value * oldOperand,
 
 void updateStoreInstWithNewOperand(StoreInst * I, Value * oldOperand, Value * newOperand, InstUpdateWorkList * updatesNeeded)
 {
+        DEBUG(llvm::errs() << "\n=====\nStoreInst: "; I->dump();
+        llvm::errs() << "pointerOperand: "; I->getPointerOperand()->dump();
+        llvm::errs() << "destType: "; I->getPointerOperand()->getType()->dump();
+        llvm::errs() << "destType element type: "; dyn_cast<PointerType>(I->getPointerOperand()->getType())->getElementType()->dump();
+        llvm::errs() << "valueOperand: "; I->getValueOperand()->dump();
+        llvm::errs() << "valueOperand type: "; I->getValueOperand()->getType()->dump();
+        llvm::errs() << "oldOperand: "; oldOperand->dump();
+        llvm::errs() << "newOperand: "; newOperand->dump();
+
+        llvm::errs() << "StoreInst users: "; I->dump(); llvm::errs() << "\n";
+        for (Value::user_iterator U = I->user_begin(), UE = I->user_end(); U != UE; ++U) {
+          U->dump(); llvm::errs() << "\n";
+        }
+        llvm::errs() << "\n======\n";);
+
         unsigned index = I->getOperand(1) == oldOperand?1:0;
         I->setOperand(index, newOperand);
         Value * storeOperand = I->getPointerOperand();
         PointerType * destType =
                 dyn_cast<PointerType>(storeOperand->getType());
 
-        if ( destType->getElementType ()
-             == I->getValueOperand()->getType() ) return;
+        DEBUG(llvm::errs() << "index: " << index << "\n";
+        llvm::errs() << "updated StoreInst: "; I->dump(););
+
+        if ( (destType->getElementType () == I->getValueOperand()->getType()) && 
+             (oldOperand == newOperand) ) {
+          DEBUG(llvm::errs() << "updateStoreInstWithNewOperand early exit #1\n=====\n";);
+          return;
+        }
 
 
         if ( index == StoreInst::getPointerOperandIndex () ) {
@@ -1602,10 +1623,13 @@ void updateOperandType(Function * oldF, Function * newF, FunctionType* ty, InstU
     for (BasicBlock::iterator I = B->begin(), Ie = B->end(); I != Ie; ++I) {
       if (SelectInst *Sel = dyn_cast<SelectInst>(I)) {
         assert(Sel->getOperand(1) && "#1  operand  of Select Instruction is invalid!");
+        DEBUG(llvm::errs() << "updateOperandType: SelectInst: "; Sel->dump(); llvm::errs() << "\n";);
         if (Sel->getType() != I->getOperand(1)->getType()) {
           // mutate type only when absolutely necessary
           Sel->mutateType(I->getOperand(1)->getType());
           updateListWithUsers(I->user_begin(), I->user_end(), I.operator->(), I.operator->(), workList);
+        } else {
+          DEBUG(llvm::errs() << "NOT going to update SelectInst users\n";);
         }
       } else if( GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(I)) {
         // Only handle GEPs with parameters promoted (ex: after a select instruction)
