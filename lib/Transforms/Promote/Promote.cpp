@@ -1525,76 +1525,6 @@ void eraseOldTileStaticDefs(Module *M)
     }
 }
 
-void promoteAllocas (Function * Func,
-                     InstUpdateWorkList * updatesNeeded)
-{
-        typedef BasicBlock::iterator iterator;
-        for (iterator I = Func->begin()->begin();
-             isa<AllocaInst>(I); ++I) {
-                AllocaInst * AI = cast<AllocaInst>(I);
-                Type * allocatedType = AI->getType()->getElementType();
-                Type * promotedType = mapTypeToGlobal(allocatedType);
-
-                if ( allocatedType == promotedType ) continue;
-
-                AllocaInst * clonedAlloca = new AllocaInst(promotedType,
-                                                           AI->getArraySize(),
-                                                           "", AI);
-
-                updateListWithUsers ( AI->user_begin(), AI->user_end(),
-                                      AI, clonedAlloca, updatesNeeded );
-        }
-}
-
-void promoteBitcasts (Function * F, InstUpdateWorkList * updates)
-{
-        typedef std::vector<BitCastInst *> BitCastList;
-        BitCastList foundBitCasts;
-        for (Function::iterator B = F->begin(), Be = F->end();
-             B != Be; ++B) {
-                for (BasicBlock::iterator I = B->begin(), Ie = B->end();
-                     I != Ie; ++I) {
-                        BitCastInst * BI = dyn_cast<BitCastInst>(I);
-                        if ( ! BI ) continue;
-                        foundBitCasts.push_back(BI);
-                }
-        }
-
-        for (BitCastList::const_iterator I = foundBitCasts.begin(),
-             Ie = foundBitCasts.end(); I != Ie; ++I) {
-                BitCastInst * BI = *I;
-
-                Type *destType = BI->getType();
-                PointerType * destPtrType =
-                        dyn_cast<PointerType>(destType);
-                if ( ! destPtrType ) continue;
-
-                Type * srcType = BI->getOperand(0)->getType();
-                PointerType * srcPtrType =
-                        dyn_cast<PointerType>(srcType);
-                if ( ! srcPtrType ) continue;
-#if 0
-                unsigned srcAddressSpace =
-                        srcPtrType->getAddressSpace();
-
-                unsigned destAddressSpace =
-                        destPtrType->getAddressSpace();
-#endif
-                Type * elementType = destPtrType->getElementType();
-                Type * mappedType = mapTypeToGlobal(elementType);
-                unsigned addrSpace = srcPtrType->getAddressSpace();
-                Type * newDestType = PointerType::get(mappedType, addrSpace);
-                if (elementType == mappedType) continue;
-
-                BitCastInst * newBI = new BitCastInst(BI->getOperand(0),
-                                                      newDestType, BI->getName(),
-                                                         BI);
-                updateListWithUsers (BI->user_begin(), BI->user_end(),
-                                     BI, newBI, updates);
-        }
-
-}
-
 bool hasPtrToNonZeroAddrSpace (Value * V)
 {
         Type * ValueType = V->getType();
@@ -1743,22 +1673,11 @@ Function * createPromotedFunctionToType ( Function * F, FunctionType * promoteTy
 
         ValueToValueMapTy CorrectedMapping;
         InstUpdateWorkList workList;
-//        promoteAllocas(newFunction, workList);
-//        promoteBitcasts(newFunction, workList);
         promoteGlobalVars(newFunction, &workList);
         updateArgUsers (newFunction, &workList);
         updateOperandType(F, newFunction, promoteType, &workList);
 
         do {
-                /*while( !workList.empty() ) {
-                        update_token update = workList.back();
-                        workList.pop_back();
-                        updateInstructionWithNewOperand (update.subject,
-                                                         update.oldOperand,
-                                                         update.newOperand,
-                                                         workList);
-
-                }*/
                 workList.run();
                 CollectChangedCalledFunctions ( newFunction, &workList );
         } while ( !workList.empty() );
