@@ -42,7 +42,7 @@ typedef std::map <Function *, Function *> FunctionMap;
 
 /* The name of the MDNode into which the list of
    MD nodes referencing each HCC kernel is stored. */
-static Twine KernelListMDNodeName = "hcc.kernels";
+const char *KernelListMDNodeName = "hcc.kernels";
 
 enum {
         PrivateAddressSpace = 0,
@@ -420,7 +420,7 @@ NamedMDNode * getNewKernelListMDNode (Module & M)
         if ( current ) {
                 M.eraseNamedMetadata (current);
         }
-        return M.getOrInsertNamedMetadata (KernelListMDNodeName.str());
+        return M.getOrInsertNamedMetadata(KernelListMDNodeName);
 }
 
 Type * mapTypeToGlobal ( Type *);
@@ -1301,7 +1301,7 @@ static bool usedInTheFunc(const User *U, const Function* F)
   if (const Instruction *instr = dyn_cast<Instruction>(U)) {
     if (instr->getParent() && instr->getParent()->getParent()) {
       const Function *curFunc = instr->getParent()->getParent();
-      if (curFunc->getName().str() == F->getName().str())
+      if (curFunc == F)
         return true;
       else
         return false;
@@ -1402,35 +1402,30 @@ void promoteGlobalVars(Function *Func, InstUpdateWorkList * updateNeeded)
     Module::GlobalListType &globals = M->getGlobalList();
     for (Module::global_iterator I = globals.begin(), E = globals.end();
         I != E; I++) {
-        unsigned the_space = LocalAddressSpace;
+      if (!usedInTheFunc(&*I, Func))
+        continue;
+      unsigned the_space = LocalAddressSpace;
         if (!I->hasSection() && I->isConstant() &&
             I->getType()->getPointerAddressSpace() == 0 &&
             I->hasName() && I->getLinkage() == GlobalVariable::InternalLinkage) {
             // Though I'm global, I'm constant indeed.
-          if(usedInTheFunc(I.operator->(), Func))
             the_space = ConstantAddressSpace;
-          else
-            continue;
         } else if (!I->hasSection() && I->isConstant() &&
             I->getType()->getPointerAddressSpace() == 0 &&
             I->hasName() && I->getLinkage() == GlobalVariable::PrivateLinkage) {
             // Though I'm private, I'm constant indeed.
             // FIXME: We should determine constant with address space (2) for OpenCL SPIR
             //              during clang front-end. It is not reliable to determine that in Promte stage
-            if(usedInTheFunc(I.operator->(), Func))
-              the_space = ConstantAddressSpace;
-            else
-              continue;
+          the_space = ConstantAddressSpace;
         } else if (!I->hasSection() ||
-            I->getSection() != std::string(TILE_STATIC_NAME) ||
-            !I->hasName()) {
+            I->getSection() != TILE_STATIC_NAME || !I->hasName()) {
             // promote to global address space if the variable is used in a kernel
             // and does not come with predefined address space
-            if (usedInTheFunc(I.operator->(), Func) && I->getType()->getPointerAddressSpace() == 0) {
-              the_space = GlobalAddressSpace;
-            } else {
-              continue;
-            }
+          if (I->getType()->getPointerAddressSpace() == 0) {
+            the_space = GlobalAddressSpace;
+          } else {
+            continue;
+          }
         }
 
         // If the address of this global variable is available from host, it
@@ -1446,8 +1441,11 @@ void promoteGlobalVars(Function *Func, InstUpdateWorkList * updateNeeded)
         for (Value::user_iterator U = I->user_begin(), Ue = I->user_end();
             U!=Ue;) {
             if (Instruction *Ins = dyn_cast<Instruction>(*U)) {
-                users.insert(Ins->getParent()->getParent());
-                uses.insert(std::make_pair(Ins->getParent()->getParent(), *U));
+                Function *F = Ins->getParent()->getParent();
+                if (F == Func) {
+                  users.insert(F);
+                  uses.insert(std::make_pair(F, *U));
+                }
             } else if (ConstantExpr *C = dyn_cast<ConstantExpr>(*U)) {
                 // Replace ConstantExpr with Instruction so we can track it
                 updateListWithUsers (*U, I.operator->(), I.operator->(), updateNeeded);
@@ -1471,7 +1469,7 @@ void promoteGlobalVars(Function *Func, InstUpdateWorkList * updateNeeded)
 
             // tile static variables cannot have an initializer
             llvm::Constant *Init = nullptr;
-            if (I->hasSection() && (I->getSection() == std::string(TILE_STATIC_NAME))) {
+            if (I->hasSection() && (I->getSection() == TILE_STATIC_NAME)) {
                 Init = llvm::UndefValue::get(I->getType()->getElementType());
             } else {
                 Init = I->hasInitializer() ? I->getInitializer() : 0;
@@ -1483,18 +1481,7 @@ void promoteGlobalVars(Function *Func, InstUpdateWorkList * updateNeeded)
                     Init,
                     "", (GlobalVariable *)0, I->getThreadLocalMode(), the_space);
             new_GV->copyAttributesFrom(I.operator->());
-            if (i == 0) {
-                new_GV->takeName(I.operator->());
-            } else {
-                new_GV->setName(I->getName());
-            }
-            if (new_GV->getName().find('.') == 0) {
-                // HSAIL does not accept dot at the front of identifier
-                // (clang generates dot names for string literals)
-                std::string tmp = new_GV->getName();
-                tmp[0] = 'x';
-                new_GV->setName(tmp);
-            }
+            new_GV->setName(I->getName());
             std::pair<Uses::iterator, Uses::iterator> usesOfSameFunction;
             usesOfSameFunction = uses.equal_range(*F);
             for ( Uses::iterator U = usesOfSameFunction.first, Ue =
@@ -1926,14 +1913,21 @@ bool PromoteGlobals::runOnModule(Module& M)
         FunctionMap promotedKernels;
         if (!findKernels(M, foundKernels)) return false;
 
-        typedef FunctionVect::const_iterator kernel_iterator;
-        for (kernel_iterator F = foundKernels.begin(), Fe = foundKernels.end();
-             F != Fe; ++F) {
-                if ((*F)->empty())
+        // HSAIL does not accept dot at the front of identifier
+        // (clang generates dot names for string literals)
+        for (auto &GV : M.globals()) {
+          StringRef Name = GV.getName();
+          if (Name[0] == '.') {
+            Twine FixedName("x", Name.substr(1));
+            GV.setName(FixedName);
+          }
+        }
+        for (auto &F : foundKernels) {
+                if (F->empty())
                     continue;
-                Function * promoted = createPromotedFunction (*F);
-                promoted->takeName (*F);
-                promoted->setName(promoted->getName().str());
+                Function * promoted = createPromotedFunction (F);
+                promoted->takeName(F);
+                promoted->setName(promoted->getName());
 
                 promoted->setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
                 // lambdas can be set as internal. This causes problem
@@ -1942,36 +1936,33 @@ bool PromoteGlobals::runOnModule(Module& M)
                         GlobalValue::InternalLinkage) {
                     promoted->setLinkage(GlobalValue::ExternalLinkage);
                 }
-                (*F)->setLinkage(GlobalValue::InternalLinkage);
-                promotedKernels[*F] = promoted;
+                F->setLinkage(GlobalValue::InternalLinkage);
+                promotedKernels[F] = promoted;
         }
         updateKernels (M, promotedKernels);
+        eraseOldTileStaticDefs(&M);
 
         // Rename local variables per SPIR naming rule
-        Module::GlobalListType &globals = M.getGlobalList();
-        for (Module::global_iterator I = globals.begin(), E = globals.end();
+        for (Module::global_iterator I = M.global_begin(), E = M.global_end();
                 I != E; I++) {
             if (I->hasSection() &&
-                    I->getSection() == std::string(TILE_STATIC_NAME) &&
+                    I->getSection() == TILE_STATIC_NAME &&
                     I->getType()->getPointerAddressSpace() != 0) {
 
-                std::string oldName = I->getName().str();
                 // Prepend the name of the function which contains the user
-                std::set<std::string> userNames;
-                for (Value::user_iterator U = I->user_begin(), Ue = I->user_end();
-                    U != Ue; U ++) {
-                    Instruction *Ins = dyn_cast<Instruction>(*U);
-                    if (!Ins)
-                        continue;
-                    userNames.insert(Ins->getParent()->getParent()->getName().str());
+                StringRef funcName;
+                for (const auto &U : I->users()) {
+                    Instruction *Ins = dyn_cast<Instruction>(U);
+                    if (!Ins) continue;
+                    StringRef userName = Ins->getParent()->getParent()->getName();
+                    // A local memory variable belongs to only one kernel, per SPIR spec
+                    assert((funcName.empty() || funcName == userName)
+                      && "__local variable belongs to more than one kernel");
+                    funcName = userName;
                 }
-                // A local memory variable belongs to only one kernel, per SPIR spec
-                assert(userNames.size() < 2 &&
-                        "__local variable belongs to more than one kernel");
-                if (userNames.empty())
+                if (funcName.empty())
                     continue;
-                oldName = *(userNames.begin()) + "."+oldName;
-                I->setName(oldName);
+                I->setName(Twine(funcName, ".").concat(I->getName()));
                 // AMD SPIR stack takes only internal linkage
                 if (I->hasInitializer())
                     I->setLinkage(GlobalValue::InternalLinkage);
