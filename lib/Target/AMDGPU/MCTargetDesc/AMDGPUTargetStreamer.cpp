@@ -198,7 +198,7 @@ void AMDGPUTargetELFStreamer::EmitAMDGPUHsaProgramScopeGlobal(
   Symbol->setBinding(ELF::STB_GLOBAL);
 }
 
-void AMDGPUTargetStreamer::emitRuntimeMetadataAsNoteElement(Module &M) {
+void AMDGPUTargetELFStreamer::emitRuntimeMetadata(Module &M) {
   auto &S = getStreamer();
   auto &Context = S.getContext();
 
@@ -223,11 +223,14 @@ void AMDGPUTargetStreamer::emitRuntimeMetadataAsNoteElement(Module &M) {
   S.EmitValue(DescSZ, 4);                                     // descz
   S.EmitIntValue(PT_NOTE::NT_AMDGPU_HSA_RUNTIME_METADATA, 4); // type
   S.EmitBytes(StringRef(PT_NOTE::NoteName, NameSZ));          // name
-  S.EmitValueToAlignment(4);                                  // padding 0
+  S.EmitValueToAlignment(4, 0, 1, 0);                         // padding 0
   S.EmitLabel(DescBegin);
   S.EmitBytes(getRuntimeMD(M));                               // desc
   S.EmitLabel(DescEnd);
-  S.EmitValueToAlignment(4);                                  // padding 0
+  S.EmitValueToAlignment(4, 0, 1, 0);                         // padding 0
   S.PopSection();
 }
 
+void AMDGPUTargetAsmStreamer::emitRuntimeMetadata(Module &M) {
+  OS << ".runtime_metadata\n;" << getRuntimeMD(M);
+}

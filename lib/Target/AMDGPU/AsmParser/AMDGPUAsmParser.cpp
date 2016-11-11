@@ -587,6 +587,7 @@ private:
   bool ParseDirectiveMajorMinor(uint32_t &Major, uint32_t &Minor);
   bool ParseDirectiveHSACodeObjectVersion();
   bool ParseDirectiveHSACodeObjectISA();
+  bool ParseRuntimeMD();
   bool ParseAMDKernelCodeTValue(StringRef ID, amd_kernel_code_t &Header);
   bool ParseDirectiveAMDKernelCodeT();
   bool ParseSectionDirectiveHSAText();
@@ -1493,6 +1494,10 @@ bool AMDGPUAsmParser::ParseDirectiveHSACodeObjectVersion() {
   return false;
 }
 
+bool AMDGPUAsmParser::ParseRuntimeMD() {
+  return true;
+}
+
 bool AMDGPUAsmParser::ParseDirectiveHSACodeObjectISA() {
 
   uint32_t Major;
@@ -1681,6 +1686,9 @@ bool AMDGPUAsmParser::ParseDirective(AsmToken DirectiveID) {
 
   if (IDVal == ".hsarodata_readonly_agent")
     return ParseSectionDirectiveHSARodataReadonlyAgent();
+
+  if (IDVal == ".runtime_metadata")
+    return ParseRuntimeMD();
 
   return true;
 }

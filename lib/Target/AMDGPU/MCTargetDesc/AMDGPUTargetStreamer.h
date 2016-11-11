@@ -43,8 +43,7 @@ public:
 
   virtual void EmitAMDGPUHsaProgramScopeGlobal(StringRef GlobalName) = 0;
 
-  /// Emit runtime metadata as a note element.
-  void emitRuntimeMetadataAsNoteElement(Module &M);
+  virtual void emitRuntimeMetadata(Module &M) = 0;
 };
 
 class AMDGPUTargetAsmStreamer : public AMDGPUTargetStreamer {
@@ -65,6 +64,8 @@ public:
   void EmitAMDGPUHsaModuleScopeGlobal(StringRef GlobalName) override;
 
   void EmitAMDGPUHsaProgramScopeGlobal(StringRef GlobalName) override;
+
+  void emitRuntimeMetadata(Module &M) override;
 };
 
 class AMDGPUTargetELFStreamer : public AMDGPUTargetStreamer {
@@ -89,6 +90,8 @@ public:
   void EmitAMDGPUHsaModuleScopeGlobal(StringRef GlobalName) override;
 
   void EmitAMDGPUHsaProgramScopeGlobal(StringRef GlobalName) override;
+
+  void emitRuntimeMetadata(Module &M) override;
 };
 
 }
