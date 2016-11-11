@@ -39,9 +39,7 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
-#include "AMDGPURuntimeMDYamlMapping.h"
 
-using namespace ::AMDGPU;
 using namespace llvm;
 
 // TODO: This should get the default rounding mode from the kernel. We just set
@@ -798,19 +796,4 @@ bool AMDGPUAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
   AMDGPUInstPrinter::printRegOperand(MI->getOperand(OpNo).getReg(), O,
                    *TM.getSubtargetImpl(*MF->getFunction())->getRegisterInfo());
   return false;
-}
-
-void AMDGPUAsmPrinter::EmitEndOfAsmFile(Module &M) {
-  MCContext &Context = getObjFileLowering().getContext();
-  OutStreamer->SwitchSection(
-      Context.getELFSection(RuntimeMD::SectionName, ELF::SHT_PROGBITS, 0));
-
-  std::string Text;
-  raw_string_ostream Stream(Text);
-  yaml::Output Output(Stream, nullptr, INT_MAX /* do not wrap line */);
-  yaml::Program Prog(M);
-  Output << Prog;
-  DEBUG_WITH_TYPE("amdgpu-rtmd",
-      llvm::dbgs() << "AMDGPU runtime metadata:\n" << Stream.str() << '\n');
-  OutStreamer->EmitBytes(Stream.str());
 }
