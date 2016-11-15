@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=amdgcn--amdhsa -file-type=object -o - < %s | llvm-readobj -amdgpu-runtime-metadata | FileCheck %s
+; RUN: llc -mtriple=amdgcn--amdhsa -filetype=obj -o - < %s | llvm-readobj -amdgpu-runtime-metadata | FileCheck %s
 
 %struct.A = type { i8, float }
 %opencl.image1d_t = type opaque
@@ -17,6 +17,7 @@
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_char(i8 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !9 !kernel_arg_base_type !9 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -26,6 +27,7 @@ define amdgpu_kernel void @test_char(i8 %a) !kernel_arg_addr_space !1 !kernel_ar
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_ushort2(<2 x i16> %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !10 !kernel_arg_base_type !10 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -35,6 +37,7 @@ define amdgpu_kernel void @test_ushort2(<2 x i16> %a) !kernel_arg_addr_space !1 
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_int3(<3 x i32> %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !11 !kernel_arg_base_type !11 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -44,6 +47,7 @@ define amdgpu_kernel void @test_int3(<3 x i32> %a) !kernel_arg_addr_space !1 !ke
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_ulong4(<4 x i64> %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !12 !kernel_arg_base_type !12 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -53,6 +57,7 @@ define amdgpu_kernel void @test_ulong4(<4 x i64> %a) !kernel_arg_addr_space !1 !
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_half8(<8 x half> %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !13 !kernel_arg_base_type !13 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -62,6 +67,7 @@ define amdgpu_kernel void @test_half8(<8 x half> %a) !kernel_arg_addr_space !1 !
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_float16(<16 x float> %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !14 !kernel_arg_base_type !14 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -71,6 +77,7 @@ define amdgpu_kernel void @test_float16(<16 x float> %a) !kernel_arg_addr_space 
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_double16(<16 x double> %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !15 !kernel_arg_base_type !15 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -80,6 +87,7 @@ define amdgpu_kernel void @test_double16(<16 x double> %a) !kernel_arg_addr_spac
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_pointer(i32 addrspace(1)* %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !16 !kernel_arg_base_type !16 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -89,6 +97,7 @@ define amdgpu_kernel void @test_pointer(i32 addrspace(1)* %a) !kernel_arg_addr_s
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_image(%opencl.image2d_t addrspace(1)* %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !17 !kernel_arg_base_type !17 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -98,6 +107,7 @@ define amdgpu_kernel void @test_image(%opencl.image2d_t addrspace(1)* %a) !kerne
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_sampler(i32 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !18 !kernel_arg_base_type !18 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -107,6 +117,7 @@ define amdgpu_kernel void @test_sampler(i32 %a) !kernel_arg_addr_space !1 !kerne
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_queue(%opencl.queue_t addrspace(1)* %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !19 !kernel_arg_base_type !19 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -116,6 +127,7 @@ define amdgpu_kernel void @test_queue(%opencl.queue_t addrspace(1)* %a) !kernel_
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_struct(%struct.A* byval %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !20 !kernel_arg_base_type !20 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -125,6 +137,7 @@ define amdgpu_kernel void @test_struct(%struct.A* byval %a) !kernel_arg_addr_spa
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_i128(i128 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !21 !kernel_arg_base_type !21 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -136,6 +149,7 @@ define amdgpu_kernel void @test_i128(i128 %a) !kernel_arg_addr_space !1 !kernel_
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_multi_arg(i32 %a, <2 x i16> %b, <3 x i8> %c) !kernel_arg_addr_space !22 !kernel_arg_access_qual !23 !kernel_arg_type !24 !kernel_arg_base_type !24 !kernel_arg_type_qual !25 {
   ret void
 }
@@ -147,6 +161,7 @@ define amdgpu_kernel void @test_multi_arg(i32 %a, <2 x i16> %b, <3 x i8> %c) !ke
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_addr_space(i32 addrspace(1)* %g, i32 addrspace(2)* %c, i32 addrspace(3)* %l) !kernel_arg_addr_space !50 !kernel_arg_access_qual !23 !kernel_arg_type !51 !kernel_arg_base_type !51 !kernel_arg_type_qual !25 {
   ret void
 }
@@ -158,6 +173,7 @@ define amdgpu_kernel void @test_addr_space(i32 addrspace(1)* %g, i32 addrspace(2
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_type_qual(i32 addrspace(1)* %a, i32 addrspace(1)* %b, %opencl.pipe_t addrspace(1)* %c) !kernel_arg_addr_space !22 !kernel_arg_access_qual !23 !kernel_arg_type !51 !kernel_arg_base_type !51 !kernel_arg_type_qual !70 {
   ret void
 }
@@ -169,6 +185,7 @@ define amdgpu_kernel void @test_type_qual(i32 addrspace(1)* %a, i32 addrspace(1)
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_access_qual(%opencl.image1d_t addrspace(1)* %ro, %opencl.image2d_t addrspace(1)* %wo, %opencl.image3d_t addrspace(1)* %rw) !kernel_arg_addr_space !60 !kernel_arg_access_qual !61 !kernel_arg_type !62 !kernel_arg_base_type !62 !kernel_arg_type_qual !25 {
   ret void
 }
@@ -178,6 +195,7 @@ define amdgpu_kernel void @test_access_qual(%opencl.image1d_t addrspace(1)* %ro,
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_vec_type_hint_half(i32 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !3 !kernel_arg_base_type !3 !kernel_arg_type_qual !4 !vec_type_hint !26 {
   ret void
 }
@@ -187,6 +205,7 @@ define amdgpu_kernel void @test_vec_type_hint_half(i32 %a) !kernel_arg_addr_spac
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_vec_type_hint_float(i32 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !3 !kernel_arg_base_type !3 !kernel_arg_type_qual !4 !vec_type_hint !27 {
   ret void
 }
@@ -196,6 +215,7 @@ define amdgpu_kernel void @test_vec_type_hint_float(i32 %a) !kernel_arg_addr_spa
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_vec_type_hint_double(i32 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !3 !kernel_arg_base_type !3 !kernel_arg_type_qual !4 !vec_type_hint !28 {
   ret void
 }
@@ -205,6 +225,7 @@ define amdgpu_kernel void @test_vec_type_hint_double(i32 %a) !kernel_arg_addr_sp
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_vec_type_hint_char(i32 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !3 !kernel_arg_base_type !3 !kernel_arg_type_qual !4 !vec_type_hint !29 {
   ret void
 }
@@ -214,6 +235,7 @@ define amdgpu_kernel void @test_vec_type_hint_char(i32 %a) !kernel_arg_addr_spac
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_vec_type_hint_short(i32 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !3 !kernel_arg_base_type !3 !kernel_arg_type_qual !4 !vec_type_hint !30 {
   ret void
 }
@@ -223,6 +245,7 @@ define amdgpu_kernel void @test_vec_type_hint_short(i32 %a) !kernel_arg_addr_spa
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_vec_type_hint_long(i32 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !3 !kernel_arg_base_type !3 !kernel_arg_type_qual !4 !vec_type_hint !31 {
   ret void
 }
@@ -232,6 +255,7 @@ define amdgpu_kernel void @test_vec_type_hint_long(i32 %a) !kernel_arg_addr_spac
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_vec_type_hint_unknown(i32 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !3 !kernel_arg_base_type !3 !kernel_arg_type_qual !4 !vec_type_hint !32 {
   ret void
 }
@@ -241,6 +265,7 @@ define amdgpu_kernel void @test_vec_type_hint_unknown(i32 %a) !kernel_arg_addr_s
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_reqd_wgs_vec_type_hint(i32 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !3 !kernel_arg_base_type !3 !kernel_arg_type_qual !4 !vec_type_hint !5 !reqd_work_group_size !6 {
   ret void
 }
@@ -250,6 +275,7 @@ define amdgpu_kernel void @test_reqd_wgs_vec_type_hint(i32 %a) !kernel_arg_addr_
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_wgs_hint_vec_type_hint(i32 %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !3 !kernel_arg_base_type !3 !kernel_arg_type_qual !4 !vec_type_hint !7 !work_group_size_hint !8 {
   ret void
 }
@@ -259,6 +285,7 @@ define amdgpu_kernel void @test_wgs_hint_vec_type_hint(i32 %a) !kernel_arg_addr_
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_arg_ptr_to_ptr(i32 * addrspace(1)* %a) !kernel_arg_addr_space !81 !kernel_arg_access_qual !2 !kernel_arg_type !80 !kernel_arg_base_type !80 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -267,6 +294,7 @@ define amdgpu_kernel void @test_arg_ptr_to_ptr(i32 * addrspace(1)* %a) !kernel_a
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_arg_struct_contains_ptr(%struct.B * byval %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !82 !kernel_arg_base_type !82 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -276,6 +304,7 @@ define amdgpu_kernel void @test_arg_struct_contains_ptr(%struct.B * byval %a) !k
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_arg_vector_of_ptr(<2 x i32 addrspace(1)*> %a) !kernel_arg_addr_space !1 !kernel_arg_access_qual !2 !kernel_arg_type !83 !kernel_arg_base_type !83 !kernel_arg_type_qual !4 {
   ret void
 }
@@ -286,6 +315,7 @@ define amdgpu_kernel void @test_arg_vector_of_ptr(<2 x i32 addrspace(1)*> %a) !k
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 7, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 8, amd.ArgValueType: 9 }
 ; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 9, amd.ArgValueType: 9 }
+; CHECK-NEXT:       - { amd.ArgSize: 8, amd.ArgAlign: 8, amd.ArgKind: 11, amd.ArgValueType: 1, amd.ArgAddrQual: 1 } }
 define amdgpu_kernel void @test_arg_unknown_builtin_type(%opencl.clk_event_t addrspace(1)* %a) !kernel_arg_addr_space !81 !kernel_arg_access_qual !2 !kernel_arg_type !84 !kernel_arg_base_type !84 !kernel_arg_type_qual !4 {
   ret void
 }
