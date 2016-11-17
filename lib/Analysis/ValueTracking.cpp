@@ -1025,7 +1025,6 @@ static void computeKnownBitsFromOperator(const Operator *I, APInt &KnownZero,
     break; // Can't work with floating point.
   case Instruction::PtrToInt:
   case Instruction::IntToPtr:
-  case Instruction::AddrSpaceCast: // Pointers could be different sizes.
     // Fall through and handle them the same as zext/trunc.
     LLVM_FALLTHROUGH;
   case Instruction::ZExt:
@@ -1043,9 +1042,8 @@ static void computeKnownBitsFromOperator(const Operator *I, APInt &KnownZero,
     computeKnownBits(I->getOperand(0), KnownZero, KnownOne, Depth + 1, Q);
     KnownZero = KnownZero.zextOrTrunc(BitWidth);
     KnownOne = KnownOne.zextOrTrunc(BitWidth);
-    // AddrSpaceCasting to a wider pointer does not guarantee newly added higher
-    // bits to be zero. For other instructions it is true.
-    if (BitWidth > SrcBitWidth && I->getOpcode() != Instruction::AddrSpaceCast)
+    // Any top bits are known to be zero.
+    if (BitWidth > SrcBitWidth)
       KnownZero |= APInt::getHighBitsSet(BitWidth, BitWidth - SrcBitWidth);
     break;
   }
