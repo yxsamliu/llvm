@@ -1043,8 +1043,9 @@ static void computeKnownBitsFromOperator(const Operator *I, APInt &KnownZero,
     computeKnownBits(I->getOperand(0), KnownZero, KnownOne, Depth + 1, Q);
     KnownZero = KnownZero.zextOrTrunc(BitWidth);
     KnownOne = KnownOne.zextOrTrunc(BitWidth);
-    // Any top bits are known to be zero.
-    if (BitWidth > SrcBitWidth)
+    // AddrSpaceCasting to a wider pointer does not guarantee newly added higher
+    // bits to be zero. For other instructions it is true.
+    if (BitWidth > SrcBitWidth && I->getOpcode() != Instruction::AddrSpaceCast)
       KnownZero |= APInt::getHighBitsSet(BitWidth, BitWidth - SrcBitWidth);
     break;
   }
