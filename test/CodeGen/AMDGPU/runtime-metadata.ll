@@ -1,4 +1,5 @@
 ; RUN: llc -mtriple=amdgcn--amdhsa -filetype=obj -o - < %s | llvm-readobj -amdgpu-runtime-metadata | FileCheck %s
+; RUN: llc -mtriple=amdgcn--amdhsa -filetype=obj -amdgpu-dump-rtmd -amdgpu-check-rtmd-parser -o - < %s 2>&1 | FileCheck --check-prefix=CHECK --check-prefix=PARSER %s
 
 %struct.A = type { i8, float }
 %opencl.image1d_t = type opaque
@@ -337,6 +338,8 @@ define amdgpu_kernel void @test_pointee_align(i64 addrspace(1)* %a, i8 addrspace
 }
 
 ; CHECK-NEXT:...
+
+; PARSER: AMDGPU runtime metadata parser test passes.
 
 !llvm.printf.fmts = !{!100, !101}
 

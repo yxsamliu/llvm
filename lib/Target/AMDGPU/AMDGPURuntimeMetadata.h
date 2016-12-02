@@ -32,6 +32,10 @@
 #ifndef LLVM_LIB_TARGET_AMDGPU_AMDGPURUNTIMEMETADATA_H
 #define LLVM_LIB_TARGET_AMDGPU_AMDGPURUNTIMEMETADATA_H
 
+#include <cstdint>
+#include <vector>
+#include <string>
+
 namespace AMDGPU {
 
 namespace RuntimeMD {
@@ -119,6 +123,64 @@ namespace RuntimeMD {
       Region     = 5,
     };
   } // namespace KernelArg
+
+  // Invalid values are used to indicate an optional key should not be emitted.
+  #define INVALID_ADDR_QUAL     uint8_t(0xff)
+  #define INVALID_ACC_QUAL      uint8_t(0xff)
+  #define INVALID_KERNEL_INDEX  uint32_t(~0U)
+
+  namespace KernelArg {
+    // In-memory representation of kernel argument information.
+    struct Metadata {
+      uint32_t Size;
+      uint32_t Align;
+      uint32_t PointeeAlign;
+      uint8_t Kind;
+      uint16_t ValueType;
+      std::string TypeName;
+      std::string Name;
+      uint8_t AddrQual;
+      uint8_t AccQual;
+      uint8_t IsVolatile;
+      uint8_t IsConst;
+      uint8_t IsRestrict;
+      uint8_t IsPipe;
+      Metadata() : Size(0), Align(0), PointeeAlign(0), Kind(0), ValueType(0),
+          AddrQual(INVALID_ADDR_QUAL), AccQual(INVALID_ACC_QUAL), IsVolatile(0),
+          IsConst(0), IsRestrict(0), IsPipe(0) {}
+    };
+  }
+
+  namespace Kernel {
+    // In-memory representation of kernel information.
+    struct Metadata {
+      std::string Name;
+      std::string Language;
+      std::vector<uint8_t> LanguageVersion;
+      std::vector<uint32_t> ReqdWorkGroupSize;
+      std::vector<uint32_t> WorkGroupSizeHint;
+      std::string VecTypeHint;
+      uint32_t KernelIndex;
+      uint8_t NoPartialWorkGroups;
+      std::vector<KernelArg::Metadata> Args;
+      Metadata() : KernelIndex(INVALID_KERNEL_INDEX), NoPartialWorkGroups(0) {}
+    };
+  }
+
+  namespace Program {
+    // In-memory representation of program information.
+    struct Metadata {
+      std::vector<uint8_t> MDVersionSeq;
+      std::vector<std::string> PrintfInfo;
+      std::vector<Kernel::Metadata> Kernels;
+
+      // Convert to YAML string.
+      std::string toYAML();
+
+      // Convert from YAML string.
+      static Metadata fromYAML(const std::string &S);
+    };
+  }
 } // namespace RuntimeMD
 } // namespace AMDGPU
 

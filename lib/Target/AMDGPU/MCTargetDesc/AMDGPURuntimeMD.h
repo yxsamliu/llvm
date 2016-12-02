@@ -19,7 +19,8 @@
 namespace llvm {
 class Module;
 
-std::string getRuntimeMD(Module &M);
+// Get runtime metadata as YAML string.
+std::string getRuntimeMDYAMLString(Module &M);
 
 }
 #endif
