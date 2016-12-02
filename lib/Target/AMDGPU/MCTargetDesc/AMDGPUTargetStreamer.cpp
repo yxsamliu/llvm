@@ -225,7 +225,7 @@ void AMDGPUTargetELFStreamer::emitRuntimeMetadata(Module &M) {
   S.EmitBytes(StringRef(PT_NOTE::NoteName, NameSZ));          // name
   S.EmitValueToAlignment(4, 0, 1, 0);                         // padding 0
   S.EmitLabel(DescBegin);
-  S.EmitBytes(getRuntimeMD(M));                               // desc
+  S.EmitBytes(getRuntimeMDYAMLString(M));                               // desc
   S.EmitLabel(DescEnd);
   S.EmitValueToAlignment(4, 0, 1, 0);                         // padding 0
   S.PopSection();

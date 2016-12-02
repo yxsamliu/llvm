@@ -20,156 +20,79 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Module.h"
-#include "llvm/Support/Debug.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/YAMLTraits.h"
 #include <vector>
 #include "AMDGPURuntimeMD.h"
 
-#define DEBUG_TYPE "amdgpu-rtmd"
-
-using namespace ::AMDGPU;
 using namespace llvm;
+using namespace ::AMDGPU::RuntimeMD;
 
-namespace llvm {
+static cl::opt<bool>
+DumpRuntimeMD("amdgpu-dump-rtmd",
+              cl::desc("Dump AMDGPU runtime metadata"));
 
-class Module;
-
-namespace AMDGPU {
-namespace RuntimeMD {
-
-// Invalid values are used to indicate an optional key should not be emitted.
-#define INVALID_ADDR_QUAL     uint8_t(0xff)
-#define INVALID_ACC_QUAL      uint8_t(0xff)
-#define INVALID_KERNEL_INDEX  uint32_t(~0U)
-
-struct Arg {
-  uint32_t Size;
-  uint32_t Align;
-  uint32_t PointeeAlign;
-  uint8_t Kind;
-  uint16_t ValueType;
-  StringRef TypeName;
-  StringRef Name;
-  uint8_t AddrQual;
-  uint8_t AccQual;
-  uint8_t IsVolatile;
-  uint8_t IsConst;
-  uint8_t IsRestrict;
-  uint8_t IsPipe;
-  Arg() : Size(0), Align(0), PointeeAlign(0), Kind(0), ValueType(0),
-      AddrQual(INVALID_ADDR_QUAL), AccQual(INVALID_ACC_QUAL), IsVolatile(0),
-      IsConst(0), IsRestrict(0), IsPipe(0) {}
-};
-
-struct Kernel {
-  StringRef Name;
-  StringRef Language;
-  std::vector<uint8_t> LanguageVersion;
-  std::vector<uint32_t> ReqdWorkGroupSize;
-  std::vector<uint32_t> WorkGroupSizeHint;
-  // This value cannot be StringRef since it is generated on the fly.
-  std::string VecTypeHint;
-  uint32_t KernelIndex;
-  uint8_t NoPartialWorkGroups;
-  std::vector<Arg> Args;
-  Kernel() : KernelIndex(INVALID_KERNEL_INDEX), NoPartialWorkGroups(0) {}
-};
-
-struct Program {
-  std::vector<uint8_t> MDVersionSeq;
-  std::vector<StringRef> PrintfInfo;
-  std::vector<Kernel> Kernels;
-
-  Program(Module &M);
-};
-
-} // namespace RuntimeMD
-} // namespace AMDGPU
-} // namespace llvm
-
-using namespace llvm::AMDGPU::RuntimeMD;
+static cl::opt<bool>
+CheckRuntimeMDParser("amdgpu-check-rtmd-parser", cl::Hidden,
+                     cl::desc("Check AMDGPU runtime metadata YAML parser"));
 
 LLVM_YAML_IS_FLOW_SEQUENCE_VECTOR(uint8_t)
 LLVM_YAML_IS_FLOW_SEQUENCE_VECTOR(uint32_t)
-LLVM_YAML_IS_FLOW_SEQUENCE_VECTOR(StringRef)
-LLVM_YAML_IS_SEQUENCE_VECTOR(Kernel)
-LLVM_YAML_IS_SEQUENCE_VECTOR(Arg)
+LLVM_YAML_IS_FLOW_SEQUENCE_VECTOR(std::string)
+LLVM_YAML_IS_SEQUENCE_VECTOR(Kernel::Metadata)
+LLVM_YAML_IS_SEQUENCE_VECTOR(KernelArg::Metadata)
 
 namespace llvm {
 namespace yaml {
 
-template <> struct MappingTraits<Arg> {
-  static void mapping(IO &YamlIO, Arg &A) {
-    YamlIO.mapRequired(::AMDGPU::RuntimeMD::KeyName::ArgSize,
-        A.Size);
-    YamlIO.mapRequired(::AMDGPU::RuntimeMD::KeyName::ArgAlign,
-        A.Align);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::ArgPointeeAlign,
-        A.PointeeAlign, 0U);
-    YamlIO.mapRequired(::AMDGPU::RuntimeMD::KeyName::ArgKind,
-        A.Kind);
-    YamlIO.mapRequired(::AMDGPU::RuntimeMD::KeyName::ArgValueType,
-        A.ValueType);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::ArgTypeName,
-        A.TypeName, StringRef());
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::ArgName,
-        A.Name, StringRef());
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::ArgAddrQual,
-        A.AddrQual, INVALID_ADDR_QUAL);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::ArgAccQual,
-        A.AccQual, INVALID_ACC_QUAL);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::ArgIsVolatile,
-        A.IsVolatile, uint8_t(0));
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::ArgIsConst,
-        A.IsConst, uint8_t(0));
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::ArgIsRestrict,
-        A.IsRestrict, uint8_t(0));
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::ArgIsPipe,
-        A.IsPipe, uint8_t(0));
+template <> struct MappingTraits<KernelArg::Metadata> {
+  static void mapping(IO &YamlIO, KernelArg::Metadata &A) {
+    YamlIO.mapRequired(KeyName::ArgSize, A.Size);
+    YamlIO.mapRequired(KeyName::ArgAlign, A.Align);
+    YamlIO.mapOptional(KeyName::ArgPointeeAlign, A.PointeeAlign, 0U);
+    YamlIO.mapRequired(KeyName::ArgKind, A.Kind);
+    YamlIO.mapRequired(KeyName::ArgValueType, A.ValueType);
+    YamlIO.mapOptional(KeyName::ArgTypeName, A.TypeName, std::string());
+    YamlIO.mapOptional(KeyName::ArgName, A.Name, std::string());
+    YamlIO.mapOptional(KeyName::ArgAddrQual, A.AddrQual, INVALID_ADDR_QUAL);
+    YamlIO.mapOptional(KeyName::ArgAccQual, A.AccQual, INVALID_ACC_QUAL);
+    YamlIO.mapOptional(KeyName::ArgIsVolatile, A.IsVolatile, uint8_t(0));
+    YamlIO.mapOptional(KeyName::ArgIsConst, A.IsConst, uint8_t(0));
+    YamlIO.mapOptional(KeyName::ArgIsRestrict, A.IsRestrict, uint8_t(0));
+    YamlIO.mapOptional(KeyName::ArgIsPipe, A.IsPipe, uint8_t(0));
   }
   static const bool flow = true;
 };
 
-template <> struct MappingTraits<Kernel> {
-  static void mapping(IO &YamlIO, Kernel &K) {
-    YamlIO.mapRequired(::AMDGPU::RuntimeMD::KeyName::KernelName,
-        K.Name);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::Language,
-        K.Language);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::LanguageVersion,
-        K.LanguageVersion);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::ReqdWorkGroupSize,
-        K.ReqdWorkGroupSize);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::WorkGroupSizeHint,
-        K.WorkGroupSizeHint);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::VecTypeHint,
-        K.VecTypeHint, std::string());
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::KernelIndex,
-        K.KernelIndex, INVALID_KERNEL_INDEX);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::NoPartialWorkGroups,
-        K.NoPartialWorkGroups, uint8_t(0));
-    YamlIO.mapRequired(::AMDGPU::RuntimeMD::KeyName::Args,
-        K.Args);
+template <> struct MappingTraits<Kernel::Metadata> {
+  static void mapping(IO &YamlIO, Kernel::Metadata &K) {
+    YamlIO.mapRequired(KeyName::KernelName, K.Name);
+    YamlIO.mapOptional(KeyName::Language, K.Language, std::string());
+    YamlIO.mapOptional(KeyName::LanguageVersion, K.LanguageVersion);
+    YamlIO.mapOptional(KeyName::ReqdWorkGroupSize, K.ReqdWorkGroupSize);
+    YamlIO.mapOptional(KeyName::WorkGroupSizeHint, K.WorkGroupSizeHint);
+    YamlIO.mapOptional(KeyName::VecTypeHint, K.VecTypeHint, std::string());
+    YamlIO.mapOptional(KeyName::KernelIndex, K.KernelIndex,
+        INVALID_KERNEL_INDEX);
+    YamlIO.mapOptional(KeyName::NoPartialWorkGroups, K.NoPartialWorkGroups,
+        uint8_t(0));
+    YamlIO.mapRequired(KeyName::Args, K.Args);
   }
   static const bool flow = true;
 };
 
-template <> struct MappingTraits<Program> {
-  static void mapping(IO &YamlIO, Program &Prog) {
-    YamlIO.mapRequired(::AMDGPU::RuntimeMD::KeyName::MDVersion,
-        Prog.MDVersionSeq);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::PrintfInfo,
-        Prog.PrintfInfo);
-    YamlIO.mapOptional(::AMDGPU::RuntimeMD::KeyName::Kernels,
-      Prog.Kernels);
+template <> struct MappingTraits<Program::Metadata> {
+  static void mapping(IO &YamlIO, Program::Metadata &Prog) {
+    YamlIO.mapRequired(KeyName::MDVersion, Prog.MDVersionSeq);
+    YamlIO.mapOptional(KeyName::PrintfInfo, Prog.PrintfInfo);
+    YamlIO.mapOptional(KeyName::Kernels, Prog.Kernels);
   }
   static const bool flow = true;
 };
 
 } // end namespace yaml
 } // end namespace llvm
-
 
 // Get a vector of three integer values from MDNode \p Node;
 static std::vector<uint32_t> getThreeInt32(MDNode *Node) {
@@ -218,29 +141,29 @@ static std::string getOCLTypeName(Type *Ty, bool Signed) {
   }
 }
 
-static RuntimeMD::KernelArg::ValueType getRuntimeMDValueType(
+static KernelArg::ValueType getRuntimeMDValueType(
   Type *Ty, StringRef TypeName) {
   switch (Ty->getTypeID()) {
   case Type::HalfTyID:
-    return RuntimeMD::KernelArg::F16;
+    return KernelArg::F16;
   case Type::FloatTyID:
-    return RuntimeMD::KernelArg::F32;
+    return KernelArg::F32;
   case Type::DoubleTyID:
-    return RuntimeMD::KernelArg::F64;
+    return KernelArg::F64;
   case Type::IntegerTyID: {
     bool Signed = !TypeName.startswith("u");
     switch (Ty->getIntegerBitWidth()) {
     case 8:
-      return Signed ? RuntimeMD::KernelArg::I8 : RuntimeMD::KernelArg::U8;
+      return Signed ? KernelArg::I8 : KernelArg::U8;
     case 16:
-      return Signed ? RuntimeMD::KernelArg::I16 : RuntimeMD::KernelArg::U16;
+      return Signed ? KernelArg::I16 : KernelArg::U16;
     case 32:
-      return Signed ? RuntimeMD::KernelArg::I32 : RuntimeMD::KernelArg::U32;
+      return Signed ? KernelArg::I32 : KernelArg::U32;
     case 64:
-      return Signed ? RuntimeMD::KernelArg::I64 : RuntimeMD::KernelArg::U64;
+      return Signed ? KernelArg::I64 : KernelArg::U64;
     default:
       // Runtime does not recognize other integer types. Report as struct type.
-      return RuntimeMD::KernelArg::Struct;
+      return KernelArg::Struct;
     }
   }
   case Type::VectorTyID:
@@ -248,34 +171,34 @@ static RuntimeMD::KernelArg::ValueType getRuntimeMDValueType(
   case Type::PointerTyID:
     return getRuntimeMDValueType(Ty->getPointerElementType(), TypeName);
   default:
-    return RuntimeMD::KernelArg::Struct;
+    return KernelArg::Struct;
   }
 }
 
-static RuntimeMD::KernelArg::AddressSpaceQualifer getRuntimeAddrSpace(
+static KernelArg::AddressSpaceQualifer getRuntimeAddrSpace(
     AMDGPUAS::AddressSpaces A) {
   switch (A) {
   case AMDGPUAS::GLOBAL_ADDRESS:
-    return RuntimeMD::KernelArg::Global;
+    return KernelArg::Global;
   case AMDGPUAS::CONSTANT_ADDRESS:
-    return RuntimeMD::KernelArg::Constant;
+    return KernelArg::Constant;
   case AMDGPUAS::LOCAL_ADDRESS:
-    return RuntimeMD::KernelArg::Local;
+    return KernelArg::Local;
   case AMDGPUAS::FLAT_ADDRESS:
-    return RuntimeMD::KernelArg::Generic;
+    return KernelArg::Generic;
   case AMDGPUAS::REGION_ADDRESS:
-    return RuntimeMD::KernelArg::Region;
+    return KernelArg::Region;
   default:
-    return RuntimeMD::KernelArg::Private;
+    return KernelArg::Private;
   }
 }
 
-static Arg getRuntimeMDForKernelArg(const DataLayout &DL, Type *T,
-    RuntimeMD::KernelArg::Kind Kind, StringRef BaseTypeName = "",
+static KernelArg::Metadata getRuntimeMDForKernelArg(const DataLayout &DL,
+    Type *T, KernelArg::Kind Kind, StringRef BaseTypeName = "",
     StringRef TypeName = "", StringRef ArgName = "", StringRef TypeQual = "",
     StringRef AccQual = "") {
 
-  Arg Arg;
+  KernelArg::Metadata Arg;
 
   // Set ArgSize and ArgAlign.
   Arg.Size = DL.getTypeAllocSize(T);
@@ -315,11 +238,11 @@ static Arg getRuntimeMDForKernelArg(const DataLayout &DL, Type *T,
 
   // Set ArgAccQual.
   if (!AccQual.empty()) {
-    Arg.AccQual = StringSwitch<RuntimeMD::KernelArg::AccessQualifer>(AccQual)
-      .Case("read_only",  RuntimeMD::KernelArg::ReadOnly)
-      .Case("write_only", RuntimeMD::KernelArg::WriteOnly)
-      .Case("read_write", RuntimeMD::KernelArg::ReadWrite)
-      .Default(RuntimeMD::KernelArg::None);
+    Arg.AccQual = StringSwitch<KernelArg::AccessQualifer>(AccQual)
+      .Case("read_only",  KernelArg::ReadOnly)
+      .Case("write_only", KernelArg::WriteOnly)
+      .Case("read_write", KernelArg::ReadWrite)
+      .Default(KernelArg::None);
   }
 
   // Set ArgAddrQual.
@@ -331,8 +254,8 @@ static Arg getRuntimeMDForKernelArg(const DataLayout &DL, Type *T,
   return Arg;
 }
 
-static Kernel getRuntimeMDForKernel(const Function &F) {
-  Kernel Kernel;
+static Kernel::Metadata getRuntimeMDForKernel(const Function &F) {
+  Kernel::Metadata Kernel;
   Kernel.Name = F.getName();
   auto &M = *F.getParent();
 
@@ -367,24 +290,24 @@ static Kernel getRuntimeMDForKernel(const Function &F) {
         "kernel_arg_type_qual")->getOperand(I))->getString();
     auto AccQual = cast<MDString>(F.getMetadata(
         "kernel_arg_access_qual")->getOperand(I))->getString();
-    RuntimeMD::KernelArg::Kind Kind;
+    KernelArg::Kind Kind;
     if (TypeQual.find("pipe") != StringRef::npos)
-      Kind = RuntimeMD::KernelArg::Pipe;
-    else Kind = StringSwitch<RuntimeMD::KernelArg::Kind>(BaseTypeName)
-      .Case("sampler_t", RuntimeMD::KernelArg::Sampler)
-      .Case("queue_t",   RuntimeMD::KernelArg::Queue)
+      Kind = KernelArg::Pipe;
+    else Kind = StringSwitch<KernelArg::Kind>(BaseTypeName)
+      .Case("sampler_t", KernelArg::Sampler)
+      .Case("queue_t",   KernelArg::Queue)
       .Cases("image1d_t", "image1d_array_t", "image1d_buffer_t",
-             "image2d_t" , "image2d_array_t",  RuntimeMD::KernelArg::Image)
+             "image2d_t" , "image2d_array_t",  KernelArg::Image)
       .Cases("image2d_depth_t", "image2d_array_depth_t",
              "image2d_msaa_t", "image2d_array_msaa_t",
-             "image2d_msaa_depth_t",  RuntimeMD::KernelArg::Image)
+             "image2d_msaa_depth_t",  KernelArg::Image)
       .Cases("image2d_array_msaa_depth_t", "image3d_t",
-             RuntimeMD::KernelArg::Image)
+             KernelArg::Image)
       .Default(isa<PointerType>(T) ?
                    (T->getPointerAddressSpace() == AMDGPUAS::LOCAL_ADDRESS ?
-                   RuntimeMD::KernelArg::DynamicSharedPointer :
-                   RuntimeMD::KernelArg::GlobalBuffer) :
-                   RuntimeMD::KernelArg::ByValue);
+                   KernelArg::DynamicSharedPointer :
+                   KernelArg::GlobalBuffer) :
+                   KernelArg::ByValue);
     Kernel.Args.emplace_back(getRuntimeMDForKernelArg(DL, T, Kind,
         BaseTypeName, TypeName, ArgName, TypeQual, AccQual));
   }
@@ -393,16 +316,16 @@ static Kernel getRuntimeMDForKernel(const Function &F) {
   if (F.getParent()->getNamedMetadata("opencl.ocl.version")) {
     auto Int64T = Type::getInt64Ty(F.getContext());
     Kernel.Args.emplace_back(getRuntimeMDForKernelArg(DL, Int64T,
-        RuntimeMD::KernelArg::HiddenGlobalOffsetX));
+        KernelArg::HiddenGlobalOffsetX));
     Kernel.Args.emplace_back(getRuntimeMDForKernelArg(DL, Int64T,
-        RuntimeMD::KernelArg::HiddenGlobalOffsetY));
+        KernelArg::HiddenGlobalOffsetY));
     Kernel.Args.emplace_back(getRuntimeMDForKernelArg(DL, Int64T,
-        RuntimeMD::KernelArg::HiddenGlobalOffsetZ));
+        KernelArg::HiddenGlobalOffsetZ));
     if (F.getParent()->getNamedMetadata("llvm.printf.fmts")) {
       auto Int8PtrT = Type::getInt8PtrTy(F.getContext(),
-          RuntimeMD::KernelArg::Global);
+          KernelArg::Global);
       Kernel.Args.emplace_back(getRuntimeMDForKernelArg(DL, Int8PtrT,
-          RuntimeMD::KernelArg::HiddenPrintfBuffer));
+          KernelArg::HiddenPrintfBuffer));
     }
   }
 
@@ -421,16 +344,44 @@ static Kernel getRuntimeMDForKernel(const Function &F) {
   return Kernel;
 }
 
-Program::Program(Module &M) {
-  MDVersionSeq.push_back(::AMDGPU::RuntimeMD::MDVersion);
-  MDVersionSeq.push_back(::AMDGPU::RuntimeMD::MDRevision);
+std::string Program::Metadata::toYAML(void) {
+  std::string Text;
+  raw_string_ostream Stream(Text);
+  yaml::Output Output(Stream, nullptr, INT_MAX /* do not wrap line */);
+  Output << *this;
+  return Text;
+}
+
+Program::Metadata Program::Metadata::fromYAML(const std::string &S) {
+  Program::Metadata Prog;
+  yaml::Input Input(S);
+  Input >> Prog;
+  return Prog;
+}
+
+// Check if the YAML string can be parsed.
+static void checkRuntimeMDYAMLString(const std::string &YAML) {
+  auto P = Program::Metadata::fromYAML(YAML);
+  auto S = P.toYAML();
+  llvm::errs() << "AMDGPU runtime metadata parser test "
+               << (YAML == S ? "passes" : "fails") << ".\n";
+  if (YAML != S) {
+    llvm::errs() << "First output: " << YAML << '\n'
+                 << "Second output: " << S << '\n';
+  }
+}
+
+std::string llvm::getRuntimeMDYAMLString(Module &M) {
+  Program::Metadata Prog;
+  Prog.MDVersionSeq.push_back(MDVersion);
+  Prog.MDVersionSeq.push_back(MDRevision);
 
   // Set PrintfInfo.
   if (auto MD = M.getNamedMetadata("llvm.printf.fmts")) {
     for (unsigned I = 0; I < MD->getNumOperands(); ++I) {
       auto Node = MD->getOperand(I);
       if (Node->getNumOperands() > 0)
-        PrintfInfo.push_back(cast<MDString>(Node->getOperand(0))
+        Prog.PrintfInfo.push_back(cast<MDString>(Node->getOperand(0))
             ->getString());
     }
   }
@@ -439,16 +390,16 @@ Program::Program(Module &M) {
   for (auto &F: M.functions()) {
     if (!F.getMetadata("kernel_arg_type"))
       continue;
-    Kernels.emplace_back(getRuntimeMDForKernel(F));
+    Prog.Kernels.emplace_back(getRuntimeMDForKernel(F));
   }
-}
 
-std::string llvm::getRuntimeMD(Module &M) {
-  std::string Text;
-  raw_string_ostream Stream(Text);
-  yaml::Output Output(Stream, nullptr, INT_MAX /* do not wrap line */);
-  Program Prog(M);
-  Output << Prog;
-  DEBUG(llvm::dbgs() << "AMDGPU runtime metadata:\n" << Stream.str() << '\n');
-  return Text;
+  auto YAML = Prog.toYAML();
+
+  if (DumpRuntimeMD)
+    llvm::errs() << "AMDGPU runtime metadata:\n" << YAML << '\n';
+
+  if (CheckRuntimeMDParser)
+    checkRuntimeMDYAMLString(YAML);
+
+  return YAML;
 }
