@@ -175,6 +175,11 @@ namespace RuntimeMD {
       std::vector<std::string> PrintfInfo;
       std::vector<Kernel::Metadata> Kernels;
 
+      explicit Metadata(){}
+
+      // Construct from an YAML string.
+      explicit Metadata(const std::string &YAML);
+
       // Convert to YAML string.
       std::string toYAML();
 
