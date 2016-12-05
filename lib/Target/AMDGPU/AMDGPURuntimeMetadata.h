@@ -107,8 +107,9 @@ namespace RuntimeMD {
       F64     = 11,
     };
 
+    // Avoid using 'None' since it conflicts with a macro in X11 header file.
     enum AccessQualifer : uint8_t {
-      None       = 0,
+      AccNone    = 0,
       ReadOnly   = 1,
       WriteOnly  = 2,
       ReadWrite  = 3,
@@ -125,9 +126,9 @@ namespace RuntimeMD {
   } // namespace KernelArg
 
   // Invalid values are used to indicate an optional key should not be emitted.
-  #define INVALID_ADDR_QUAL     uint8_t(0xff)
-  #define INVALID_ACC_QUAL      uint8_t(0xff)
-  #define INVALID_KERNEL_INDEX  uint32_t(~0U)
+  const uint8_t INVALID_ADDR_QUAL     = 0xff;
+  const uint8_t INVALID_ACC_QUAL      = 0xff;
+  const uint32_t INVALID_KERNEL_INDEX = ~0U;
 
   namespace KernelArg {
     // In-memory representation of kernel argument information.

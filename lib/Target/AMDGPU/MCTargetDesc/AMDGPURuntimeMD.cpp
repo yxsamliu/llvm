@@ -17,6 +17,7 @@
 #include "AMDGPU.h"
 #include "AMDGPURuntimeMetadata.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Module.h"
@@ -242,7 +243,7 @@ static KernelArg::Metadata getRuntimeMDForKernelArg(const DataLayout &DL,
       .Case("read_only",  KernelArg::ReadOnly)
       .Case("write_only", KernelArg::WriteOnly)
       .Case("read_write", KernelArg::ReadWrite)
-      .Default(KernelArg::None);
+      .Default(KernelArg::AccNone);
   }
 
   // Set ArgAddrQual.
