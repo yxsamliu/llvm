@@ -345,6 +345,11 @@ static Kernel::Metadata getRuntimeMDForKernel(const Function &F) {
   return Kernel;
 }
 
+Program::Metadata::Metadata(const std::string &YAML) {
+  yaml::Input Input(YAML);
+  Input >> *this;
+}
+
 std::string Program::Metadata::toYAML(void) {
   std::string Text;
   raw_string_ostream Stream(Text);
@@ -354,10 +359,7 @@ std::string Program::Metadata::toYAML(void) {
 }
 
 Program::Metadata Program::Metadata::fromYAML(const std::string &S) {
-  Program::Metadata Prog;
-  yaml::Input Input(S);
-  Input >> Prog;
-  return Prog;
+  return Program::Metadata(S);
 }
 
 // Check if the YAML string can be parsed.
