@@ -355,7 +355,7 @@ std::string Program::Metadata::toYAML(void) {
   raw_string_ostream Stream(Text);
   yaml::Output Output(Stream, nullptr, INT_MAX /* do not wrap line */);
   Output << *this;
-  return Text;
+  return Stream.str();
 }
 
 Program::Metadata Program::Metadata::fromYAML(const std::string &S) {
