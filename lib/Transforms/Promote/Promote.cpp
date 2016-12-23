@@ -496,9 +496,6 @@ SequentialType * mapTypeToGlobal ( SequentialType * T ) {
         ArrayType * AT = dyn_cast<ArrayType> (T);
         if ( AT ) return mapTypeToGlobal (AT);
 
-        PointerType * PT = dyn_cast<PointerType> (T);
-        if ( PT ) return mapTypeToGlobal (PT);
-
         return T;
 }
 
@@ -518,6 +515,10 @@ Type * mapTypeToGlobal (Type * T)
 {
         CompositeType * C = dyn_cast<CompositeType>(T);
         if ( !C ) return T;
+
+        PointerType * PT = dyn_cast<PointerType> (T);
+        if ( PT ) return mapTypeToGlobal (PT);
+
         return mapTypeToGlobal (C);
 }
 
