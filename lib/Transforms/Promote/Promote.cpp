@@ -511,15 +511,15 @@ CompositeType * mapTypeToGlobal (CompositeType * T)
         return T;
 }
 
-Type * mapTypeToGlobal (Type * T)
+Type * mapTypeToGlobal(Type * T)
 {
-        CompositeType * C = dyn_cast<CompositeType>(T);
-        if ( !C ) return T;
-
         PointerType * PT = dyn_cast<PointerType> (T);
-        if ( PT ) return mapTypeToGlobal (PT);
+        if (PT) return mapTypeToGlobal(PT);
 
-        return mapTypeToGlobal (C);
+        CompositeType * C = dyn_cast<CompositeType>(T);
+        if (C) return mapTypeToGlobal(C);
+
+        return T;
 }
 
 /* Create a new function type based on the provided function so that
