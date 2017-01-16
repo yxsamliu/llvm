@@ -230,5 +230,9 @@ static bool findAndDefineBuiltinCalls(Module &M) {
 }
 
 bool AMDGPUOCL12Adapter::runOnModule(Module &M) {
+  NamedMDNode *OCLVersion = M.getNamedMetadata("opencl.ocl.version");
+  if (!OCLVersion) {
+    return false;
+  }
   return findAndDefineBuiltinCalls(M);
 }
