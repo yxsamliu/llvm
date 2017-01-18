@@ -39,8 +39,10 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPUTargetObjectFile.cpp
   AMDGPUIntrinsicInfo.cpp
   AMDGPUISelDAGToDAG.cpp
+  AMDGPULowerKernelCalls.cpp
   AMDGPUMCInstLower.cpp
   AMDGPUMachineFunction.cpp
+  AMDGPUUnifyMetadata.cpp
   AMDGPUOpenCLImageTypeLoweringPass.cpp
   AMDGPUSubtarget.cpp
   AMDGPUTargetMachine.cpp

@@ -1044,7 +1044,8 @@ private:
           StringRef Producer, bool IsOptimized, StringRef Flags,
           unsigned RuntimeVersion, StringRef SplitDebugFilename,
           unsigned EmissionKind, DICompositeTypeArray EnumTypes,
-          DIScopeArray RetainedTypes, DIGlobalVariableArray GlobalVariables,
+          DIScopeArray RetainedTypes,
+          DIGlobalVariableExpressionArray GlobalVariables,
           DIImportedEntityArray ImportedEntities, DIMacroNodeArray Macros,
           uint64_t DWOId, bool SplitDebugInlining, StorageType Storage,
           bool ShouldCreate = true) {
@@ -1084,7 +1085,7 @@ public:
        bool IsOptimized, StringRef Flags, unsigned RuntimeVersion,
        StringRef SplitDebugFilename, DebugEmissionKind EmissionKind,
        DICompositeTypeArray EnumTypes, DIScopeArray RetainedTypes,
-       DIGlobalVariableArray GlobalVariables,
+       DIGlobalVariableExpressionArray GlobalVariables,
        DIImportedEntityArray ImportedEntities, DIMacroNodeArray Macros,
        uint64_t DWOId, bool SplitDebugInlining),
       (SourceLanguage, File, Producer, IsOptimized, Flags, RuntimeVersion,
@@ -1119,7 +1120,7 @@ public:
   DIScopeArray getRetainedTypes() const {
     return cast_or_null<MDTuple>(getRawRetainedTypes());
   }
-  DIGlobalVariableArray getGlobalVariables() const {
+  DIGlobalVariableExpressionArray getGlobalVariables() const {
     return cast_or_null<MDTuple>(getRawGlobalVariables());
   }
   DIImportedEntityArray getImportedEntities() const {
@@ -1158,7 +1159,7 @@ public:
   void replaceRetainedTypes(DITypeArray N) {
     replaceOperandWith(5, N.get());
   }
-  void replaceGlobalVariables(DIGlobalVariableArray N) {
+  void replaceGlobalVariables(DIGlobalVariableExpressionArray N) {
     replaceOperandWith(6, N.get());
   }
   void replaceImportedEntities(DIImportedEntityArray N) {
@@ -1296,6 +1297,24 @@ public:
 
   /// Returns a new DILocation with updated \p Discriminator.
   inline DILocation *cloneWithDiscriminator(unsigned Discriminator) const;
+
+  /// When two instructions are combined into a single instruction we also
+  /// need to combine the original locations into a single location.
+  ///
+  /// When the locations are the same we can use either location. When they
+  /// differ, we need a third location which is distinct from either. If
+  /// they have the same file/line but have a different discriminator we
+  /// could create a location with a new discriminator. If they are from
+  /// different files/lines the location is ambiguous and can't be
+  /// represented in a single line entry.  In this case, no location
+  /// should be set.
+  ///
+  /// Currently this function is simply a stub, and no location will be
+  /// used for all cases.
+  static DILocation *getMergedLocation(const DILocation *LocA,
+                                       const DILocation *LocB) {
+    return nullptr;
+  }
 
   Metadata *getRawScope() const { return getOperand(0); }
   Metadata *getRawInlinedAt() const {
@@ -1971,6 +1990,9 @@ public:
   /// Return the size of this fragment in bits.
   uint64_t getFragmentSizeInBits() const;
 
+  /// Determine whether this represents a standalone constant value.
+  bool isConstant() const;
+
   typedef ArrayRef<uint64_t>::iterator element_iterator;
   element_iterator elements_begin() const { return getElements().begin(); }
   element_iterator elements_end() const { return getElements().end(); }
@@ -2090,32 +2112,30 @@ class DIGlobalVariable : public DIVariable {
         IsLocalToUnit(IsLocalToUnit), IsDefinition(IsDefinition) {}
   ~DIGlobalVariable() = default;
 
-  static DIGlobalVariable *
-  getImpl(LLVMContext &Context, DIScope *Scope, StringRef Name,
-          StringRef LinkageName, DIFile *File, unsigned Line,
-          unsigned AddressSpace, DITypeRef Type, bool IsLocalToUnit,
-          bool IsDefinition, DIExpression *Expr,
-          DIDerivedType *StaticDataMemberDeclaration, uint32_t AlignInBits,
-          StorageType Storage, bool ShouldCreate = true) {
+  static DIGlobalVariable *getImpl(LLVMContext &Context, DIScope *Scope,
+                                   StringRef Name, StringRef LinkageName,
+                                   DIFile *File, unsigned Line, unsigned AddressSpace, DITypeRef Type,
+                                   bool IsLocalToUnit, bool IsDefinition,
+                                   DIDerivedType *StaticDataMemberDeclaration,
+                                   uint32_t AlignInBits, StorageType Storage,
+                                   bool ShouldCreate = true) {
     return getImpl(Context, Scope, getCanonicalMDString(Context, Name),
-                   getCanonicalMDString(Context, LinkageName), File, Line,
-                   AddressSpace, Type, IsLocalToUnit, IsDefinition, Expr,
-                   StaticDataMemberDeclaration, AlignInBits, Storage,
-                   ShouldCreate);
+                   getCanonicalMDString(Context, LinkageName), File, Line, AddressSpace, Type,
+                   IsLocalToUnit, IsDefinition, StaticDataMemberDeclaration,
+                   AlignInBits, Storage, ShouldCreate);
   }
   static DIGlobalVariable *
   getImpl(LLVMContext &Context, Metadata *Scope, MDString *Name,
-          MDString *LinkageName, Metadata *File, unsigned Line,
-          unsigned AddressSpace, Metadata *Type, bool IsLocalToUnit,
-          bool IsDefinition, Metadata *Expr,
+          MDString *LinkageName, Metadata *File, unsigned Line, unsigned AddressSpace, Metadata *Type,
+          bool IsLocalToUnit, bool IsDefinition,
           Metadata *StaticDataMemberDeclaration, uint32_t AlignInBits,
           StorageType Storage, bool ShouldCreate = true);
 
   TempDIGlobalVariable cloneImpl() const {
     return getTemporary(getContext(), getScope(), getName(), getLinkageName(),
-                        getFile(), getLine(), getAddressSpace(), getType(),
-                        isLocalToUnit(), isDefinition(), getExpr(),
-                        getStaticDataMemberDeclaration(), getAlignInBits());
+                        getFile(), getLine(), getAddressSpace(), getType(), isLocalToUnit(),
+                        isDefinition(), getStaticDataMemberDeclaration(),
+                        getAlignInBits());
   }
 
 public:
@@ -2123,21 +2143,18 @@ public:
                     (DIScope * Scope, StringRef Name, StringRef LinkageName,
                      DIFile *File, unsigned Line, unsigned AddressSpace, DITypeRef Type,
                      bool IsLocalToUnit, bool IsDefinition,
-                     DIExpression *Expr,
                      DIDerivedType *StaticDataMemberDeclaration,
                      uint32_t AlignInBits),
                     (Scope, Name, LinkageName, File, Line, AddressSpace, Type, IsLocalToUnit,
-                     IsDefinition, Expr, StaticDataMemberDeclaration,
-                     AlignInBits))
+                     IsDefinition, StaticDataMemberDeclaration, AlignInBits))
   DEFINE_MDNODE_GET(DIGlobalVariable,
                     (Metadata * Scope, MDString *Name, MDString *LinkageName,
                      Metadata *File, unsigned Line, unsigned AddressSpace, Metadata *Type,
                      bool IsLocalToUnit, bool IsDefinition,
-                     Metadata *Expr, Metadata *StaticDataMemberDeclaration,
+                     Metadata *StaticDataMemberDeclaration,
                      uint32_t AlignInBits),
                     (Scope, Name, LinkageName, File, Line, AddressSpace, Type, IsLocalToUnit,
-                     IsDefinition, Expr, StaticDataMemberDeclaration,
-                     AlignInBits))
+                     IsDefinition, StaticDataMemberDeclaration, AlignInBits))
 
   TempDIGlobalVariable clone() const { return cloneImpl(); }
 
@@ -2145,19 +2162,12 @@ public:
   bool isDefinition() const { return IsDefinition; }
   StringRef getDisplayName() const { return getStringOperand(4); }
   StringRef getLinkageName() const { return getStringOperand(5); }
-  DIExpression *getExpr() const {
-    return cast_or_null<DIExpression>(getRawExpr());
-  }
-  void replaceExpr(DIExpression *E) {
-    replaceOperandWith(6, E);
-  }
   DIDerivedType *getStaticDataMemberDeclaration() const {
     return cast_or_null<DIDerivedType>(getRawStaticDataMemberDeclaration());
   }
 
   MDString *getRawLinkageName() const { return getOperandAs<MDString>(5); }
-  Metadata *getRawExpr() const { return getOperand(6); }
-  Metadata *getRawStaticDataMemberDeclaration() const { return getOperand(7); }
+  Metadata *getRawStaticDataMemberDeclaration() const { return getOperand(6); }
 
   static bool classof(const Metadata *MD) {
     return MD->getMetadataID() == DIGlobalVariableKind;
@@ -2382,6 +2392,45 @@ public:
 
   static bool classof(const Metadata *MD) {
     return MD->getMetadataID() == DIImportedEntityKind;
+  }
+};
+
+/// A pair of DIGlobalVariable and DIExpression.
+class DIGlobalVariableExpression : public MDNode {
+  friend class LLVMContextImpl;
+  friend class MDNode;
+
+  DIGlobalVariableExpression(LLVMContext &C, StorageType Storage,
+                             ArrayRef<Metadata *> Ops)
+      : MDNode(C, DIGlobalVariableExpressionKind, Storage, Ops) {}
+  ~DIGlobalVariableExpression() = default;
+
+  static DIGlobalVariableExpression *
+  getImpl(LLVMContext &Context, Metadata *Variable, Metadata *Expression,
+          StorageType Storage, bool ShouldCreate = true);
+
+  TempDIGlobalVariableExpression cloneImpl() const {
+    return getTemporary(getContext(), getVariable(), getExpression());
+  }
+
+public:
+  DEFINE_MDNODE_GET(DIGlobalVariableExpression,
+                    (Metadata * Variable, Metadata *Expression),
+                    (Variable, Expression))
+
+  TempDIGlobalVariableExpression clone() const { return cloneImpl(); }
+
+  Metadata *getRawVariable() const { return getOperand(0); }
+  DIGlobalVariable *getVariable() const {
+    return cast_or_null<DIGlobalVariable>(getRawVariable());
+  }
+  Metadata *getRawExpression() const { return getOperand(1); }
+  DIExpression *getExpression() const {
+    return cast_or_null<DIExpression>(getRawExpression());
+  }
+
+  static bool classof(const Metadata *MD) {
+    return MD->getMetadataID() == DIGlobalVariableExpressionKind;
   }
 };
 

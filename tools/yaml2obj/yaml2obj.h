@@ -24,7 +24,8 @@ struct Object;
 }
 
 namespace DWARFYAML {
-struct DWARFData;
+struct Data;
+struct PubSection;
 }
 
 namespace yaml {
@@ -38,8 +39,12 @@ int yaml2elf(llvm::ELFYAML::Object &Doc, llvm::raw_ostream &Out);
 int yaml2macho(llvm::yaml::YamlObjectFile &Doc, llvm::raw_ostream &Out);
 
 void yaml2debug_abbrev(llvm::raw_ostream &OS,
-                       const llvm::DWARFYAML::DWARFData &DI);
+                       const llvm::DWARFYAML::Data &DI);
 void yaml2debug_str(llvm::raw_ostream &OS,
-                    const llvm::DWARFYAML::DWARFData &DI);
+                    const llvm::DWARFYAML::Data &DI);
+
+void yaml2debug_aranges(llvm::raw_ostream &OS, const llvm::DWARFYAML::Data &DI);
+void yaml2pubsection(llvm::raw_ostream &OS,
+                     const llvm::DWARFYAML::PubSection &Sect);
 
 #endif

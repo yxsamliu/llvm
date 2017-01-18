@@ -4252,8 +4252,7 @@ bool LLParser::ParseDITemplateValueParameter(MDNode *&Result, bool IsDistinct) {
 /// ParseDIGlobalVariable:
 ///   ::= !DIGlobalVariable(scope: !0, name: "foo", linkageName: "foo",
 ///                         file: !1, line: 7, addressSpace: 0, type: !2, isLocal: false,
-///                         isDefinition: true, variable: i32* @foo,
-///                         declaration: !3, align: 8)
+///                         isDefinition: true, declaration: !3, align: 8)
 bool LLParser::ParseDIGlobalVariable(MDNode *&Result, bool IsDistinct) {
 #define VISIT_MD_FIELDS(OPTIONAL, REQUIRED)                                    \
   REQUIRED(name, MDStringField, (/* AllowEmpty */ false));                     \
@@ -4265,7 +4264,6 @@ bool LLParser::ParseDIGlobalVariable(MDNode *&Result, bool IsDistinct) {
   OPTIONAL(type, MDField, );                                                   \
   OPTIONAL(isLocal, MDBoolField, );                                            \
   OPTIONAL(isDefinition, MDBoolField, (true));                                 \
-  OPTIONAL(expr, MDField, );                                                   \
   OPTIONAL(declaration, MDField, );                                            \
   OPTIONAL(align, MDUnsignedField, (0, UINT32_MAX));
   PARSE_MD_FIELDS();
@@ -4274,8 +4272,7 @@ bool LLParser::ParseDIGlobalVariable(MDNode *&Result, bool IsDistinct) {
   Result = GET_OR_DISTINCT(DIGlobalVariable,
                            (Context, scope.Val, name.Val, linkageName.Val,
                             file.Val, line.Val, addressSpace.Val, type.Val, isLocal.Val,
-                            isDefinition.Val, expr.Val, declaration.Val,
-                            align.Val));
+                            isDefinition.Val, declaration.Val, align.Val));
   return false;
 }
 
@@ -4341,6 +4338,21 @@ bool LLParser::ParseDIExpression(MDNode *&Result, bool IsDistinct) {
     return true;
 
   Result = GET_OR_DISTINCT(DIExpression, (Context, Elements));
+  return false;
+}
+
+/// ParseDIGlobalVariableExpression:
+///   ::= !DIGlobalVariableExpression(var: !0, expr: !1)
+bool LLParser::ParseDIGlobalVariableExpression(MDNode *&Result,
+                                               bool IsDistinct) {
+#define VISIT_MD_FIELDS(OPTIONAL, REQUIRED)                                    \
+  REQUIRED(var, MDField, );                                                    \
+  OPTIONAL(expr, MDField, );
+  PARSE_MD_FIELDS();
+#undef VISIT_MD_FIELDS
+
+  Result =
+      GET_OR_DISTINCT(DIGlobalVariableExpression, (Context, var.Val, expr.Val));
   return false;
 }
 
@@ -4517,13 +4529,13 @@ bool LLParser::ConvertValIDToValue(Type *Ty, ValID &ID, Value *&V,
 
     // The lexer has no type info, so builds all half, float, and double FP
     // constants as double.  Fix this here.  Long double does not need this.
-    if (&ID.APFloatVal.getSemantics() == &APFloat::IEEEdouble) {
+    if (&ID.APFloatVal.getSemantics() == &APFloat::IEEEdouble()) {
       bool Ignored;
       if (Ty->isHalfTy())
-        ID.APFloatVal.convert(APFloat::IEEEhalf, APFloat::rmNearestTiesToEven,
+        ID.APFloatVal.convert(APFloat::IEEEhalf(), APFloat::rmNearestTiesToEven,
                               &Ignored);
       else if (Ty->isFloatTy())
-        ID.APFloatVal.convert(APFloat::IEEEsingle, APFloat::rmNearestTiesToEven,
+        ID.APFloatVal.convert(APFloat::IEEEsingle(), APFloat::rmNearestTiesToEven,
                               &Ignored);
     }
     V = ConstantFP::get(Context, ID.APFloatVal);

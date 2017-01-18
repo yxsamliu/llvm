@@ -68,8 +68,8 @@ struct DenseMapAPIntKeyInfo {
 };
 
 struct DenseMapAPFloatKeyInfo {
-  static inline APFloat getEmptyKey() { return APFloat(APFloat::Bogus, 1); }
-  static inline APFloat getTombstoneKey() { return APFloat(APFloat::Bogus, 2); }
+  static inline APFloat getEmptyKey() { return APFloat(APFloat::Bogus(), 1); }
+  static inline APFloat getTombstoneKey() { return APFloat(APFloat::Bogus(), 2); }
   static unsigned getHashValue(const APFloat &Key) {
     return static_cast<unsigned>(hash_value(Key));
   }
@@ -764,26 +764,23 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
   Metadata *Type;
   bool IsLocalToUnit;
   bool IsDefinition;
-  Metadata *Expr;
   Metadata *StaticDataMemberDeclaration;
   uint32_t AlignInBits;
 
   MDNodeKeyImpl(Metadata *Scope, MDString *Name, MDString *LinkageName,
                 Metadata *File, unsigned Line, unsigned AddressSpace, Metadata *Type,
                 bool IsLocalToUnit, bool IsDefinition,
-                Metadata *Expr, Metadata *StaticDataMemberDeclaration,
-                uint32_t AlignInBits)
+                Metadata *StaticDataMemberDeclaration, uint32_t AlignInBits)
       : Scope(Scope), Name(Name), LinkageName(LinkageName), File(File),
-        Line(Line), AddressSpace(AddressSpace), Type(Type),
-        IsLocalToUnit(IsLocalToUnit), IsDefinition(IsDefinition), Expr(Expr),
+        Line(Line), AddressSpace(AddressSpace), Type(Type), IsLocalToUnit(IsLocalToUnit),
+        IsDefinition(IsDefinition),
         StaticDataMemberDeclaration(StaticDataMemberDeclaration),
         AlignInBits(AlignInBits) {}
   MDNodeKeyImpl(const DIGlobalVariable *N)
       : Scope(N->getRawScope()), Name(N->getRawName()),
         LinkageName(N->getRawLinkageName()), File(N->getRawFile()),
-        Line(N->getLine()), AddressSpace(N->getAddressSpace()),
-        Type(N->getRawType()), IsLocalToUnit(N->isLocalToUnit()),
-        IsDefinition(N->isDefinition()), Expr(N->getRawExpr()),
+        Line(N->getLine()), AddressSpace(N->getAddressSpace()), Type(N->getRawType()),
+        IsLocalToUnit(N->isLocalToUnit()), IsDefinition(N->isDefinition()),
         StaticDataMemberDeclaration(N->getRawStaticDataMemberDeclaration()),
         AlignInBits(N->getAlignInBits()) {}
 
@@ -794,7 +791,6 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
            AddressSpace == RHS->getAddressSpace() &&
            Type == RHS->getRawType() && IsLocalToUnit == RHS->isLocalToUnit() &&
            IsDefinition == RHS->isDefinition() &&
-           Expr == RHS->getRawExpr() &&
            StaticDataMemberDeclaration ==
                RHS->getRawStaticDataMemberDeclaration() &&
            AlignInBits == RHS->getAlignInBits();
@@ -808,7 +804,7 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
     // generated IR is random for each run and test fails with Align included.
     // TODO: make hashing work fine with such situations
     return hash_combine(Scope, Name, LinkageName, File, Line, AddressSpace, Type,
-                        IsLocalToUnit, IsDefinition, /* AlignInBits, */ Expr,
+                        IsLocalToUnit, IsDefinition, /* AlignInBits, */
                         StaticDataMemberDeclaration);
   }
 };
@@ -865,6 +861,22 @@ template <> struct MDNodeKeyImpl<DIExpression> {
   unsigned getHashValue() const {
     return hash_combine_range(Elements.begin(), Elements.end());
   }
+};
+
+template <> struct MDNodeKeyImpl<DIGlobalVariableExpression> {
+  Metadata *Variable;
+  Metadata *Expression;
+
+  MDNodeKeyImpl(Metadata *Variable, Metadata *Expression)
+      : Variable(Variable), Expression(Expression) {}
+  MDNodeKeyImpl(const DIGlobalVariableExpression *N)
+      : Variable(N->getRawVariable()), Expression(N->getRawExpression()) {}
+
+  bool isKeyOf(const DIGlobalVariableExpression *RHS) const {
+    return Variable == RHS->getRawVariable() &&
+           Expression == RHS->getRawExpression();
+  }
+  unsigned getHashValue() const { return hash_combine(Variable, Expression); }
 };
 
 template <> struct MDNodeKeyImpl<DIObjCProperty> {
