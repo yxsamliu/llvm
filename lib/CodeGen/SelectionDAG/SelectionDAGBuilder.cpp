@@ -3268,9 +3268,9 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
   if (VectorWidth && !N.getValueType().isVector()) {
     LLVMContext &Context = *DAG.getContext();
     EVT VT = EVT::getVectorVT(Context, N.getValueType(), VectorWidth);
-    SmallVector<SDValue, 16> Ops(VectorWidth, N);
-    N = DAG.getNode(ISD::BUILD_VECTOR, dl, VT, Ops);
+    N = DAG.getSplatBuildVector(VT, dl, N);
   }
+
   for (gep_type_iterator GTI = gep_type_begin(&I), E = gep_type_end(&I);
        GTI != E; ++GTI) {
     const Value *Idx = GTI.getOperand();
@@ -3326,9 +3326,9 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
 
       if (!IdxN.getValueType().isVector() && VectorWidth) {
         MVT VT = MVT::getVectorVT(IdxN.getValueType().getSimpleVT(), VectorWidth);
-        SmallVector<SDValue, 16> Ops(VectorWidth, IdxN);
-        IdxN = DAG.getNode(ISD::BUILD_VECTOR, dl, VT, Ops);
+        IdxN = DAG.getSplatBuildVector(VT, dl, IdxN);
       }
+
       // If the index is smaller or larger than intptr_t, truncate or extend
       // it.
       IdxN = DAG.getSExtOrTrunc(IdxN, dl, N.getValueType());
@@ -3770,8 +3770,7 @@ static bool getUniformBase(const Value* &Ptr, SDValue& Base, SDValue& Index,
   if (!Index.getValueType().isVector()) {
     unsigned GEPWidth = GEP->getType()->getVectorNumElements();
     EVT VT = EVT::getVectorVT(Context, Index.getValueType(), GEPWidth);
-    SmallVector<SDValue, 16> Ops(GEPWidth, Index);
-    Index = DAG.getNode(ISD::BUILD_VECTOR, SDLoc(Index), VT, Ops);
+    Index = DAG.getSplatBuildVector(VT, SDLoc(Index), Index);
   }
   return true;
 }
@@ -4173,7 +4172,7 @@ static SDValue GetExponent(SelectionDAG &DAG, SDValue Op,
 /// getF32Constant - Get 32-bit floating point constant.
 static SDValue getF32Constant(SelectionDAG &DAG, unsigned Flt,
                               const SDLoc &dl) {
-  return DAG.getConstantFP(APFloat(APFloat::IEEEsingle, APInt(32, Flt)), dl,
+  return DAG.getConstantFP(APFloat(APFloat::IEEEsingle(), APInt(32, Flt)), dl,
                            MVT::f32);
 }
 
@@ -7733,8 +7732,19 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
         Flags.setZExt();
       if (Args[i].isSExt)
         Flags.setSExt();
-      if (Args[i].isInReg)
+      if (Args[i].isInReg) {
+        // If we are using vectorcall calling convention, a structure that is
+        // passed InReg - is surely an HVA
+        if (CLI.CallConv == CallingConv::X86_VectorCall &&
+            isa<StructType>(FinalType)) {
+          // The first value of a structure is marked
+          if (0 == Value)
+            Flags.setHvaStart();
+          Flags.setHva();
+        }
+        // Set InReg Flag
         Flags.setInReg();
+      }
       if (Args[i].isSRet)
         Flags.setSRet();
       if (Args[i].isSwiftSelf)
@@ -8020,8 +8030,19 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
         Flags.setZExt();
       if (F.getAttributes().hasAttribute(Idx, Attribute::SExt))
         Flags.setSExt();
-      if (F.getAttributes().hasAttribute(Idx, Attribute::InReg))
+      if (F.getAttributes().hasAttribute(Idx, Attribute::InReg)) {
+        // If we are using vectorcall calling convention, a structure that is
+        // passed InReg - is surely an HVA
+        if (F.getCallingConv() == CallingConv::X86_VectorCall &&
+            isa<StructType>(I->getType())) {
+          // The first value of a structure is marked
+          if (0 == Value)
+            Flags.setHvaStart();
+          Flags.setHva();
+        }
+        // Set InReg Flag
         Flags.setInReg();
+      }
       if (F.getAttributes().hasAttribute(Idx, Attribute::StructRet))
         Flags.setSRet();
       if (F.getAttributes().hasAttribute(Idx, Attribute::SwiftSelf))

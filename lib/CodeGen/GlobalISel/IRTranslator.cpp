@@ -438,17 +438,52 @@ void IRTranslator::getStackGuard(unsigned DstReg,
   MIB.setMemRefs(MemRefs, MemRefs + 1);
 }
 
+bool IRTranslator::translateOverflowIntrinsic(const CallInst &CI, unsigned Op,
+                                              MachineIRBuilder &MIRBuilder) {
+  LLT Ty{*CI.getOperand(0)->getType(), *DL};
+  LLT s1 = LLT::scalar(1);
+  unsigned Width = Ty.getSizeInBits();
+  unsigned Res = MRI->createGenericVirtualRegister(Ty);
+  unsigned Overflow = MRI->createGenericVirtualRegister(s1);
+  auto MIB = MIRBuilder.buildInstr(Op)
+                 .addDef(Res)
+                 .addDef(Overflow)
+                 .addUse(getOrCreateVReg(*CI.getOperand(0)))
+                 .addUse(getOrCreateVReg(*CI.getOperand(1)));
+
+  if (Op == TargetOpcode::G_UADDE || Op == TargetOpcode::G_USUBE) {
+    unsigned Zero = MRI->createGenericVirtualRegister(s1);
+    EntryBuilder.buildConstant(Zero, 0);
+    MIB.addUse(Zero);
+  }
+
+  MIRBuilder.buildSequence(getOrCreateVReg(CI), Res, 0, Overflow, Width);
+  return true;
+}
+
 bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
                                            MachineIRBuilder &MIRBuilder) {
-  unsigned Op = 0;
   switch (ID) {
-  default: return false;
-  case Intrinsic::uadd_with_overflow: Op = TargetOpcode::G_UADDE; break;
-  case Intrinsic::sadd_with_overflow: Op = TargetOpcode::G_SADDO; break;
-  case Intrinsic::usub_with_overflow: Op = TargetOpcode::G_USUBE; break;
-  case Intrinsic::ssub_with_overflow: Op = TargetOpcode::G_SSUBO; break;
-  case Intrinsic::umul_with_overflow: Op = TargetOpcode::G_UMULO; break;
-  case Intrinsic::smul_with_overflow: Op = TargetOpcode::G_SMULO; break;
+  default:
+    break;
+  case Intrinsic::dbg_declare:
+  case Intrinsic::dbg_value:
+    // FIXME: these obviously need to be supported properly.
+    MF->getProperties().set(
+          MachineFunctionProperties::Property::FailedISel);
+    return true;
+  case Intrinsic::uadd_with_overflow:
+    return translateOverflowIntrinsic(CI, TargetOpcode::G_UADDE, MIRBuilder);
+  case Intrinsic::sadd_with_overflow:
+    return translateOverflowIntrinsic(CI, TargetOpcode::G_SADDO, MIRBuilder);
+  case Intrinsic::usub_with_overflow:
+    return translateOverflowIntrinsic(CI, TargetOpcode::G_USUBE, MIRBuilder);
+  case Intrinsic::ssub_with_overflow:
+    return translateOverflowIntrinsic(CI, TargetOpcode::G_SSUBO, MIRBuilder);
+  case Intrinsic::umul_with_overflow:
+    return translateOverflowIntrinsic(CI, TargetOpcode::G_UMULO, MIRBuilder);
+  case Intrinsic::smul_with_overflow:
+    return translateOverflowIntrinsic(CI, TargetOpcode::G_SMULO, MIRBuilder);
   case Intrinsic::memcpy:
     return translateMemcpy(CI, MIRBuilder);
   case Intrinsic::eh_typeid_for: {
@@ -484,26 +519,7 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
     return true;
   }
   }
-
-  LLT Ty{*CI.getOperand(0)->getType(), *DL};
-  LLT s1 = LLT::scalar(1);
-  unsigned Width = Ty.getSizeInBits();
-  unsigned Res = MRI->createGenericVirtualRegister(Ty);
-  unsigned Overflow = MRI->createGenericVirtualRegister(s1);
-  auto MIB = MIRBuilder.buildInstr(Op)
-                 .addDef(Res)
-                 .addDef(Overflow)
-                 .addUse(getOrCreateVReg(*CI.getOperand(0)))
-                 .addUse(getOrCreateVReg(*CI.getOperand(1)));
-
-  if (Op == TargetOpcode::G_UADDE || Op == TargetOpcode::G_USUBE) {
-    unsigned Zero = MRI->createGenericVirtualRegister(s1);
-    EntryBuilder.buildConstant(Zero, 0);
-    MIB.addUse(Zero);
-  }
-
-  MIRBuilder.buildSequence(getOrCreateVReg(CI), Res, 0, Overflow, Width);
-  return true;
+  return false;
 }
 
 bool IRTranslator::translateCall(const User &U, MachineIRBuilder &MIRBuilder) {
@@ -799,6 +815,32 @@ bool IRTranslator::runOnMachineFunction(MachineFunction &CurMF) {
     // Now that the MachineFrameInfo has been configured, no further changes to
     // the reserved registers are possible.
     MRI->freezeReservedRegs(*MF);
+
+    // Merge the argument lowering and constants block with its single
+    // successor, the LLVM-IR entry block.  We want the basic block to
+    // be maximal.
+    assert(EntryBB->succ_size() == 1 &&
+           "Custom BB used for lowering should have only one successor");
+    // Get the successor of the current entry block.
+    MachineBasicBlock &NewEntryBB = **EntryBB->succ_begin();
+    assert(NewEntryBB.pred_size() == 1 &&
+           "LLVM-IR entry block has a predecessor!?");
+    // Move all the instruction from the current entry block to the
+    // new entry block.
+    NewEntryBB.splice(NewEntryBB.begin(), EntryBB, EntryBB->begin(),
+                      EntryBB->end());
+
+    // Update the live-in information for the new entry block.
+    for (const MachineBasicBlock::RegisterMaskPair &LiveIn : EntryBB->liveins())
+      NewEntryBB.addLiveIn(LiveIn);
+    NewEntryBB.sortUniqueLiveIns();
+
+    // Get rid of the now empty basic block.
+    EntryBB->removeSuccessor(&NewEntryBB);
+    MF->remove(EntryBB);
+
+    assert(&MF->front() == &NewEntryBB &&
+           "New entry wasn't next in the list of basic block!");
   }
 
   finalizeFunction();

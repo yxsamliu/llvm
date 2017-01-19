@@ -280,7 +280,7 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::UINT_TO_FP, MVT::i16, Promote);
 
     // F16 - Constant Actions.
-    setOperationAction(ISD::ConstantFP, MVT::f16, Custom);
+    setOperationAction(ISD::ConstantFP, MVT::f16, Legal);
 
     // F16 - Load/Store Actions.
     setOperationAction(ISD::LOAD, MVT::f16, Promote);
@@ -613,6 +613,13 @@ bool SITargetLowering::isNoopAddrSpaceCast(unsigned SrcAS,
   return isFlatGlobalAddrSpace(SrcAS) && isFlatGlobalAddrSpace(DestAS);
 }
 
+bool SITargetLowering::isMemOpHasNoClobberedMemOperand(const SDNode *N) const {
+  const MemSDNode *MemNode = cast<MemSDNode>(N);
+  const Value *Ptr = MemNode->getMemOperand()->getValue();
+  const Instruction *I = dyn_cast<Instruction>(Ptr);
+  return I && I->getMetadata("amdgpu.noclobber");
+}
+
 bool SITargetLowering::isCheapAddrSpaceCast(unsigned SrcAS,
                                             unsigned DestAS) const {
   // Flat -> private/local is a simple truncate.
@@ -654,10 +661,22 @@ bool SITargetLowering::shouldConvertConstantLoadToIntImm(const APInt &Imm,
 }
 
 bool SITargetLowering::isTypeDesirableForOp(unsigned Op, EVT VT) const {
+  if (Subtarget->has16BitInsts() && VT == MVT::i16) {
+    switch (Op) {
+    case ISD::LOAD:
+    case ISD::STORE:
 
-  // i16 is not desirable unless it is a load or a store.
-  if (VT == MVT::i16 && Op != ISD::LOAD && Op != ISD::STORE)
-    return false;
+    // These operations are done with 32-bit instructions anyway.
+    case ISD::AND:
+    case ISD::OR:
+    case ISD::XOR:
+    case ISD::SELECT:
+      // TODO: Extensions?
+      return true;
+    default:
+      return false;
+    }
+  }
 
   // SimplifySetCC uses this function to determine whether or not it should
   // create setcc with i1 operands.  We don't have instructions for i1 setcc.
@@ -1681,9 +1700,32 @@ static MachineBasicBlock *emitIndirectDst(MachineInstr &MI,
 
 MachineBasicBlock *SITargetLowering::EmitInstrWithCustomInserter(
   MachineInstr &MI, MachineBasicBlock *BB) const {
+
+  const SIInstrInfo *TII = getSubtarget()->getInstrInfo();
+  MachineFunction *MF = BB->getParent();
+  SIMachineFunctionInfo *MFI = MF->getInfo<SIMachineFunctionInfo>();
+
+  if (TII->isMIMG(MI)) {
+      if (!MI.memoperands_empty())
+        return BB;
+    // Add a memoperand for mimg instructions so that they aren't assumed to
+    // be ordered memory instuctions.
+
+    MachinePointerInfo PtrInfo(MFI->getImagePSV());
+    MachineMemOperand::Flags Flags = MachineMemOperand::MODereferenceable;
+    if (MI.mayStore())
+      Flags |= MachineMemOperand::MOStore;
+
+    if (MI.mayLoad())
+      Flags |= MachineMemOperand::MOLoad;
+
+    auto MMO = MF->getMachineMemOperand(PtrInfo, Flags, 0, 0);
+    MI.addMemOperand(*MF, MMO);
+    return BB;
+  }
+
   switch (MI.getOpcode()) {
   case AMDGPU::SI_INIT_M0: {
-    const SIInstrInfo *TII = getSubtarget()->getInstrInfo();
     BuildMI(*BB, MI.getIterator(), MI.getDebugLoc(),
             TII->get(AMDGPU::S_MOV_B32), AMDGPU::M0)
       .addOperand(MI.getOperand(0));
@@ -1691,10 +1733,6 @@ MachineBasicBlock *SITargetLowering::EmitInstrWithCustomInserter(
     return BB;
   }
   case AMDGPU::GET_GROUPSTATICSIZE: {
-    const SIInstrInfo *TII = getSubtarget()->getInstrInfo();
-
-    MachineFunction *MF = BB->getParent();
-    SIMachineFunctionInfo *MFI = MF->getInfo<SIMachineFunctionInfo>();
     DebugLoc DL = MI.getDebugLoc();
     BuildMI(*BB, MI, DL, TII->get(AMDGPU::S_MOV_B32))
       .addOperand(MI.getOperand(0))
@@ -1718,7 +1756,6 @@ MachineBasicBlock *SITargetLowering::EmitInstrWithCustomInserter(
     return splitKillBlock(MI, BB);
   case AMDGPU::V_CNDMASK_B64_PSEUDO: {
     MachineRegisterInfo &MRI = BB->getParent()->getRegInfo();
-    const SIInstrInfo *TII = getSubtarget()->getInstrInfo();
 
     unsigned Dst = MI.getOperand(0).getReg();
     unsigned Src0 = MI.getOperand(1).getReg();
@@ -1743,6 +1780,15 @@ MachineBasicBlock *SITargetLowering::EmitInstrWithCustomInserter(
       .addImm(AMDGPU::sub0)
       .addReg(DstHi)
       .addImm(AMDGPU::sub1);
+    MI.eraseFromParent();
+    return BB;
+  }
+  case AMDGPU::SI_BR_UNDEF: {
+    const SIInstrInfo *TII = getSubtarget()->getInstrInfo();
+    const DebugLoc &DL = MI.getDebugLoc();
+    MachineInstr *Br = BuildMI(*BB, MI, DL, TII->get(AMDGPU::S_CBRANCH_SCC1))
+      .addOperand(MI.getOperand(0));
+    Br->getOperand(1).setIsUndef(true); // read undef SCC
     MI.eraseFromParent();
     return BB;
   }
@@ -1844,9 +1890,6 @@ SDValue SITargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::INTRINSIC_VOID: return LowerINTRINSIC_VOID(Op, DAG);
   case ISD::ADDRSPACECAST: return lowerADDRSPACECAST(Op, DAG);
   case ISD::TRAP: return lowerTRAP(Op, DAG);
-
-  case ISD::ConstantFP:
-    return lowerConstantFP(Op, DAG);
   case ISD::FP_ROUND:
     return lowerFP_ROUND(Op, DAG);
   }
@@ -2049,15 +2092,6 @@ SDValue SITargetLowering::getFPExtOrFPTrunc(SelectionDAG &DAG,
   return Op.getValueType().bitsLE(VT) ?
       DAG.getNode(ISD::FP_EXTEND, DL, VT, Op) :
       DAG.getNode(ISD::FTRUNC, DL, VT, Op);
-}
-
-SDValue SITargetLowering::lowerConstantFP(SDValue Op, SelectionDAG &DAG) const {
-  if (ConstantFPSDNode *FP = dyn_cast<ConstantFPSDNode>(Op)) {
-    return DAG.getConstant(FP->getValueAPF().bitcastToAPInt().getZExtValue(),
-                           SDLoc(Op), MVT::i32);
-  }
-
-  return SDValue();
 }
 
 SDValue SITargetLowering::lowerFP_ROUND(SDValue Op, SelectionDAG &DAG) const {
@@ -2629,6 +2663,7 @@ SDValue SITargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
 SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
                                                  SelectionDAG &DAG) const {
   unsigned IntrID = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+  SDLoc DL(Op);
   switch (IntrID) {
   case Intrinsic::amdgcn_atomic_inc:
   case Intrinsic::amdgcn_atomic_dec: {
@@ -2643,6 +2678,31 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
 
     return DAG.getMemIntrinsicNode(Opc, SDLoc(Op), M->getVTList(), Ops,
                                    M->getMemoryVT(), M->getMemOperand());
+  }
+  case Intrinsic::amdgcn_buffer_load:
+  case Intrinsic::amdgcn_buffer_load_format: {
+    SDValue Ops[] = {
+      Op.getOperand(0), // Chain
+      Op.getOperand(2), // rsrc
+      Op.getOperand(3), // vindex
+      Op.getOperand(4), // offset
+      Op.getOperand(5), // glc
+      Op.getOperand(6)  // slc
+    };
+    MachineFunction &MF = DAG.getMachineFunction();
+    SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
+
+    unsigned Opc = (IntrID == Intrinsic::amdgcn_buffer_load) ?
+        AMDGPUISD::BUFFER_LOAD : AMDGPUISD::BUFFER_LOAD_FORMAT;
+    EVT VT = Op.getValueType();
+    EVT IntVT = VT.changeTypeToInteger();
+
+    MachineMemOperand *MMO = MF.getMachineMemOperand(
+      MachinePointerInfo(MFI->getBufferPSV()),
+      MachineMemOperand::MOLoad,
+      VT.getStoreSize(), VT.getStoreSize());
+
+    return DAG.getMemIntrinsicNode(Opc, DL, Op->getVTList(), Ops, IntVT, MMO);
   }
   default:
     return SDValue();
@@ -2786,11 +2846,20 @@ SDValue SITargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
     if (isMemOpUniform(Load))
       return SDValue();
     // Non-uniform loads will be selected to MUBUF instructions, so they
-    // have the same legalization requires ments as global and private
+    // have the same legalization requirements as global and private
     // loads.
     //
     LLVM_FALLTHROUGH;
-  case AMDGPUAS::GLOBAL_ADDRESS:
+  case AMDGPUAS::GLOBAL_ADDRESS: {
+    if (Subtarget->getScalarizeGlobalBehavior() && isMemOpUniform(Load) &&
+                  isMemOpHasNoClobberedMemOperand(Load))
+      return SDValue();
+    // Non-uniform loads will be selected to MUBUF instructions, so they
+    // have the same legalization requirements as global and private
+    // loads.
+    //
+  }
+    LLVM_FALLTHROUGH;
   case AMDGPUAS::FLAT_ADDRESS:
     if (NumElements > 4)
       return SplitVectorLoad(Op, DAG);
@@ -4326,6 +4395,7 @@ SITargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
       default:
         return std::make_pair(0U, nullptr);
       case 32:
+      case 16:
         return std::make_pair(0U, &AMDGPU::SReg_32_XM0RegClass);
       case 64:
         return std::make_pair(0U, &AMDGPU::SGPR_64RegClass);
@@ -4340,6 +4410,7 @@ SITargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
       default:
         return std::make_pair(0U, nullptr);
       case 32:
+      case 16:
         return std::make_pair(0U, &AMDGPU::VGPR_32RegClass);
       case 64:
         return std::make_pair(0U, &AMDGPU::VReg_64RegClass);
