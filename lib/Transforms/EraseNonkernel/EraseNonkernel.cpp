@@ -62,6 +62,7 @@ KernelNodeVisitor::KernelNodeVisitor(FunctionVect& FV)
 void KernelNodeVisitor::operator()(MDNode *N)
 {
         if ( N->getNumOperands() < 1) return;
+        if ( N->getOperand(0) == nullptr) return;
         const MDOperand& Op = N->getOperand(0);
         if ( Function * F = mdconst::dyn_extract<Function>(Op)) {
                 found_kernels.push_back(F);
