@@ -84,12 +84,15 @@ ModulePass *createAMDGPUConvertAtomicLibCallsPass();
 void initializeAMDGPUConvertAtomicLibCallsPass(PassRegistry &);
 extern char &AMDGPUConvertAtomicLibCallsID;
 
+ModulePass *createAMDGPUclpVectorExpansionPass();
+void initializeAMDGPUclpVectorExpansionPass(PassRegistry &);
+extern char &AMDGPUclpVectorExpansionID;
+
 // Passes common to R600 and SI
 FunctionPass *createAMDGPUPromoteAlloca(const TargetMachine *TM = nullptr);
 void initializeAMDGPUPromoteAllocaPass(PassRegistry&);
 extern char &AMDGPUPromoteAllocaID;
 
-Pass *createAMDGPUStructurizeCFGPass();
 FunctionPass *createAMDGPUISelDag(TargetMachine &TM,
                                   CodeGenOpt::Level OptLevel);
 ModulePass *createAMDGPUAlwaysInlinePass();
@@ -100,9 +103,17 @@ ModulePass *createAMDGPUOCL12AdapterPass();
 void initializeAMDGPUOCL12AdapterPass(PassRegistry&);
 extern char &AMDGPUOCL12AdapterID;
 
+ModulePass *createAMDGPULowerKernelCallsPass();
+void initializeAMDGPULowerKernelCallsPass(PassRegistry&);
+extern char &AMDGPULowerKernelCallsID;
+
 ModulePass *createAMDGPUPrintfRuntimeBinding();
 void initializeAMDGPUPrintfRuntimeBindingPass(PassRegistry&);
 extern char &AMDGPUPrintfRuntimeBindingID;
+
+FunctionPass* createAMDGPUUnifyMetadataPass();
+void initializeAMDGPUUnifyMetadataPass(PassRegistry&);
+extern char &AMDGPUUnifyMetadataID;
 
 void initializeSIFixControlFlowLiveIntervalsPass(PassRegistry&);
 extern char &SIFixControlFlowLiveIntervalsID;

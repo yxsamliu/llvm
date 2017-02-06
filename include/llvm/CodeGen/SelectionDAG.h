@@ -183,8 +183,8 @@ class SelectionDAG {
   /// The AllocatorType for allocating SDNodes. We use
   /// pool allocation with recycling.
   typedef RecyclingAllocator<BumpPtrAllocator, SDNode, sizeof(LargestSDNode),
-                             AlignOf<MostAlignedSDNode>::Alignment>
-    NodeAllocatorType;
+                             alignof(MostAlignedSDNode)>
+      NodeAllocatorType;
 
   /// Pool allocation for nodes.
   NodeAllocatorType NodeAllocator;
@@ -964,6 +964,14 @@ public:
                           ArrayRef<SDValue> Ops, MachineMemOperand *MMO);
   SDValue getMaskedScatter(SDVTList VTs, EVT VT, const SDLoc &dl,
                            ArrayRef<SDValue> Ops, MachineMemOperand *MMO);
+
+  /// Return (create a new or find existing) a target-specific node.
+  /// TargetMemSDNode should be derived class from MemSDNode.
+  template <class TargetMemSDNode>
+  SDValue getTargetMemSDNode(SDVTList VTs, ArrayRef<SDValue> Ops,
+                             const SDLoc &dl, EVT MemVT,
+                             MachineMemOperand *MMO);
+
   /// Construct a node to track a Value* through the backend.
   SDValue getSrcValue(const Value *v);
 
@@ -1180,12 +1188,12 @@ public:
   static const fltSemantics &EVTToAPFloatSemantics(EVT VT) {
     switch (VT.getScalarType().getSimpleVT().SimpleTy) {
     default: llvm_unreachable("Unknown FP format");
-    case MVT::f16:     return APFloat::IEEEhalf;
-    case MVT::f32:     return APFloat::IEEEsingle;
-    case MVT::f64:     return APFloat::IEEEdouble;
-    case MVT::f80:     return APFloat::x87DoubleExtended;
-    case MVT::f128:    return APFloat::IEEEquad;
-    case MVT::ppcf128: return APFloat::PPCDoubleDouble;
+    case MVT::f16:     return APFloat::IEEEhalf();
+    case MVT::f32:     return APFloat::IEEEsingle();
+    case MVT::f64:     return APFloat::IEEEdouble();
+    case MVT::f80:     return APFloat::x87DoubleExtended();
+    case MVT::f128:    return APFloat::IEEEquad();
+    case MVT::ppcf128: return APFloat::PPCDoubleDouble();
     }
   }
 
@@ -1256,11 +1264,21 @@ public:
     const;
 
   /// Determine which bits of Op are known to be either zero or one and return
-  /// them in the KnownZero/KnownOne bitsets.  Targets can implement the
-  /// computeKnownBitsForTargetNode method in the TargetLowering class to allow
-  /// target nodes to be understood.
+  /// them in the KnownZero/KnownOne bitsets. For vectors, the known bits are
+  /// those that are shared by every vector element.
+  /// Targets can implement the computeKnownBitsForTargetNode method in the
+  /// TargetLowering class to allow target nodes to be understood.
   void computeKnownBits(SDValue Op, APInt &KnownZero, APInt &KnownOne,
                         unsigned Depth = 0) const;
+
+  /// Determine which bits of Op are known to be either zero or one and return
+  /// them in the KnownZero/KnownOne bitsets. The DemandedElts argument allows
+  /// us to only collect the known bits that are shared by the requested vector
+  /// elements.
+  /// Targets can implement the computeKnownBitsForTargetNode method in the
+  /// TargetLowering class to allow target nodes to be understood.
+  void computeKnownBits(SDValue Op, APInt &KnownZero, APInt &KnownOne,
+                        const APInt &DemandedElts, unsigned Depth = 0) const;
 
   /// Test if the given value is known to have exactly one bit set. This differs
   /// from computeKnownBits in that it doesn't necessarily determine which bit
@@ -1361,7 +1379,7 @@ private:
                                void *&InsertPos);
   SDNode *FindModifiedNodeSlot(SDNode *N, ArrayRef<SDValue> Ops,
                                void *&InsertPos);
-  SDNode *UpdadeSDLocOnMergedSDNode(SDNode *N, const SDLoc &loc);
+  SDNode *UpdateSDLocOnMergeSDNode(SDNode *N, const SDLoc &loc);
 
   void DeleteNodeNotInCSEMaps(SDNode *N);
   void DeallocateNode(SDNode *N);
@@ -1407,6 +1425,42 @@ template <> struct GraphTraits<SelectionDAG*> : public GraphTraits<SDNode*> {
     return nodes_iterator(G->allnodes_end());
   }
 };
+
+template <class TargetMemSDNode>
+SDValue SelectionDAG::getTargetMemSDNode(SDVTList VTs,
+                                         ArrayRef<SDValue> Ops,
+                                         const SDLoc &dl, EVT MemVT,
+                                         MachineMemOperand *MMO) {
+
+  /// Compose node ID and try to find an existing node.
+  FoldingSetNodeID ID;
+  unsigned Opcode =
+    TargetMemSDNode(dl.getIROrder(), DebugLoc(), VTs, MemVT, MMO).getOpcode();
+  ID.AddInteger(Opcode);
+  ID.AddPointer(VTs.VTs);
+  for (auto& Op : Ops) {
+    ID.AddPointer(Op.getNode());
+    ID.AddInteger(Op.getResNo());
+  }
+  ID.AddInteger(MemVT.getRawBits());
+  ID.AddInteger(MMO->getPointerInfo().getAddrSpace());
+  ID.AddInteger(getSyntheticNodeSubclassData<TargetMemSDNode>(
+    dl.getIROrder(), VTs, MemVT, MMO));
+
+  void *IP = nullptr;
+  if (SDNode *E = FindNodeOrInsertPos(ID, dl, IP)) {
+    cast<TargetMemSDNode>(E)->refineAlignment(MMO);
+    return SDValue(E, 0);
+  }
+
+  /// Existing node was not found. Create a new one.
+  auto *N = newSDNode<TargetMemSDNode>(dl.getIROrder(), dl.getDebugLoc(), VTs,
+                                       MemVT, MMO);
+  createOperands(N, Ops);
+  CSEMap.InsertNode(N, IP);
+  InsertNode(N);
+  return SDValue(N, 0);
+}
 
 }  // end namespace llvm
 
