@@ -1,3 +1,4 @@
+#include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Verifier.h"
@@ -5,6 +6,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 
+using namespace llvm;
 
 // Check the new launch-parm arguments to make sure they have sane default values.
 #define CHECK_LP_ARGS 1
@@ -12,6 +14,33 @@
 
 namespace
 {
+  /// A helper class to translate register control attributes of an LLVM
+  /// function to Clang function attributes.
+  class RegisterControlAttr {
+  public:
+    RegisterControlAttr(const Function &F) :
+        F(F) {
+    }
+
+    /// Translate LLVM attribute name to Clang attribute name.
+    std::string translate(StringRef LLVMAttrName,
+                          StringRef ClangAttrName) const {
+      Attribute A = F.getFnAttribute(LLVMAttrName);
+      if (!A.isStringAttribute())
+        return "";
+      return std::string("[[") + ClangAttrName.str() + "(" +
+          A.getValueAsString().str() + ")]]";
+    }
+
+    /// Get clang function attributes.
+    std::string get() const {
+      return translate("amdgpu-waves-per-eu", "hc_waves_per_eu") +
+          translate("amdgpu-flat-work-group-size", "hc_flat_workgroup_size") +
+          translate("amdgpu-max-work-group-dim", "hc_max_workgroup_dim");
+    }
+  private:
+    const Function &F;
+  };
 
   class WrapperType {
     public:
@@ -112,10 +141,11 @@ namespace
 
   class WrapperFunction {
     public:
-      WrapperFunction(llvm::Function *F) {
+      WrapperFunction(const llvm::Function *F) {
         mFunctionName = F->getName().str();
         mFunctorName = mFunctionName + "_functor";
         mWrapperName = "__hcLaunchKernel_" + mFunctionName;
+        mRegCtlAttr = RegisterControlAttr(*F).get();
       }
 
       void insertArgument(WrapperArgument* A) {
@@ -184,6 +214,14 @@ namespace
         return mArgs.size();
       }
 
+      /// Get the register control attributes.
+      /// Since the wrapper function serves as the function to be passed
+      /// to paralle_for_each, it should have the same register control
+      /// attributes of the original function having grid_launch attribute.
+      std::string getRegisterControlAttr() const {
+        return mRegCtlAttr;
+      }
+
    private:
       enum RangeOptions {
         PARAMETERS,
@@ -201,6 +239,7 @@ namespace
       std::string mFunctionName;
       std::string mFunctorName;
       std::string mWrapperName;
+      std::string mRegCtlAttr; // Register control attributes
   };
 
   class WrapperModule {
@@ -519,7 +558,9 @@ struct StringFinder
 
 
           // This code is in the compute kernel that is executed on the accelerator :
-          out << "void operator()(tiled_index<3>& i) __attribute((hc))\n{\n";
+          out << "void operator()(tiled_index<3>& i) [[hc]]"
+              << func->getRegisterControlAttr()
+              <<"\n{\n";
           out << func->getFunctionName() << "(";
           func->printArgsAsArguments(out);
           out << ");\n}\n";
@@ -540,7 +581,8 @@ struct StringFinder
               << func->getFunctorName()
               << "(";
           func->printArgsAsArguments(out);
-          out << "));\n\n"
+          out << ")"
+              << ");\n\n"
               << "if(_lp.cf)\n"
               << "  *(_lp.cf) = cf;\n"
               << "}\n";
