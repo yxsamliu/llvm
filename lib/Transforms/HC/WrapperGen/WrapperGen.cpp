@@ -265,10 +265,11 @@ namespace
             }
             // FIXME: Currently there seems to be a bug with char
             // Current workaround is to use bool since they both have the same size
-            // https://bitbucket.org/snippets/wukevin/L8nbK
+            // Relevant test case:  Unit/GridLaunch/customtype_byval_char.cpp
             std::string typeNameWithQual(sTy->getTypeNameWithQual());
             size_t start_pos = typeNameWithQual.find("char");
-            if(start_pos != std::string::npos) {
+            if(start_pos != std::string::npos
+               && typeNameWithQual.find("hc::short_vector::char") == std::string::npos) {
               typeNameWithQual.replace(start_pos, strlen("char"), "bool");
             }
 
@@ -461,6 +462,45 @@ struct StringFinder
       mArraySize = T->getArrayNumElements();
     }
 
+    if(T->isVectorTy()) {
+      llvm::Type* elementType = T->getScalarType();
+      std::string elementTypeString("");
+
+      if(llvm::IntegerType *intTy = llvm::dyn_cast<llvm::IntegerType>(elementType)) {
+        unsigned bitwidth = intTy->getBitWidth();
+          switch(bitwidth) {
+            case 8:
+              elementTypeString = "char";
+              break;
+            case 16:
+              elementTypeString = "short";
+              break;
+            case 32:
+              elementTypeString = "int";
+              break;
+            case 64:
+              elementTypeString = "long";
+              break;
+            default:
+              break;
+         };
+      }
+      else if (elementType->isFloatTy()) {
+        elementTypeString = "float";
+      }
+      else if (elementType->isDoubleTy()) {
+        elementTypeString = "double";
+      }
+      else if (elementType->isHalfTy()) {
+        elementTypeString = "half";
+      }
+
+      if (elementTypeString != "") {
+        unsigned int numElements = T->getVectorNumElements();
+        str.insert(0, "hc::short_vector::" + elementTypeString + std::to_string(numElements) + "::vector_value_type");
+      }
+    }
+
     if(str == "") {
       str.append("\'!UNKNOWN_TYPE: ");
       llvm::raw_string_ostream rso(str);
@@ -501,6 +541,7 @@ struct StringFinder
       // headers and namespace uses
       out << "#include \"hc.hpp\"\n";
       out << "#include \"grid_launch.hpp\"\n";
+      out << "#include \"hc_short_vector.hpp\"\n";
 
       out << "using namespace hc;\n";
 
