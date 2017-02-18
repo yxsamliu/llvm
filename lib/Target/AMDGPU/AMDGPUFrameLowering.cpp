@@ -101,6 +101,3 @@ int AMDGPUFrameLowering::getFrameIndexReference(const MachineFunction &MF,
   return OffsetBytes / (getStackWidth(MF) * 4);
 }
 
-int AMDGPUFrameLowering::getFrameIndexOffset(const MachineFunction &MF, int FI) const {
-  return MF.getFrameInfo().getObjectOffset(FI);
-}
