@@ -988,9 +988,9 @@ Error MetadataLoader::MetadataLoaderImpl::parseMetadata(bool ModuleLevel,
             GET_OR_DISTINCT(DIGlobalVariable,
                             (Context, getMDOrNull(Record[1]),
                              getMDString(Record[2]), getMDString(Record[3]),
-                             getMDOrNull(Record[4]), Record[5], Record[6],
-                             getDITypeRefOrNull(Record[7]), Record[8],
-                             Record[9], getMDOrNull(Record[11]), Record[12])),
+                             getMDOrNull(Record[4]), Record[5],
+                             getDITypeRefOrNull(Record[6]), Record[7],
+                             Record[8], getMDOrNull(Record[10]), Record[11])),
             NextMetadataNo++);
       } else if (Version == 0) {
         // Upgrade old metadata, which stored a global variable reference or a
@@ -1018,9 +1018,9 @@ Error MetadataLoader::MetadataLoaderImpl::parseMetadata(bool ModuleLevel,
         DIGlobalVariable *DGV = GET_OR_DISTINCT(
             DIGlobalVariable,
             (Context, getMDOrNull(Record[1]), getMDString(Record[2]),
-             getMDString(Record[3]), getMDOrNull(Record[4]), Record[5], Record[6],
-             getDITypeRefOrNull(Record[7]), Record[8], Record[9],
-             getMDOrNull(Record[11]), AlignInBits));
+             getMDString(Record[3]), getMDOrNull(Record[4]), Record[5],
+             getDITypeRefOrNull(Record[6]), Record[7], Record[8],
+             getMDOrNull(Record[10]), AlignInBits));
 
         auto *DGVE =
             DIGlobalVariableExpression::getDistinct(Context, DGV, Expr);
@@ -1054,9 +1054,9 @@ Error MetadataLoader::MetadataLoaderImpl::parseMetadata(bool ModuleLevel,
           GET_OR_DISTINCT(DILocalVariable,
                           (Context, getMDOrNull(Record[1 + HasTag]),
                            getMDString(Record[2 + HasTag]),
-                           getMDOrNull(Record[3 + HasTag]), Record[4 + HasTag], Record[5 + HasTag],
-                           getDITypeRefOrNull(Record[6 + HasTag]),
-                           Record[7 + HasTag], Flags, AlignInBits)),
+                           getMDOrNull(Record[3 + HasTag]), Record[4 + HasTag],
+                           getDITypeRefOrNull(Record[5 + HasTag]),
+                           Record[6 + HasTag], Flags, AlignInBits)),
           NextMetadataNo++);
       break;
     }
