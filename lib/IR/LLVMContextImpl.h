@@ -760,7 +760,6 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
   MDString *LinkageName;
   Metadata *File;
   unsigned Line;
-  unsigned AddressSpace;
   Metadata *Type;
   bool IsLocalToUnit;
   bool IsDefinition;
@@ -768,18 +767,18 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
   uint32_t AlignInBits;
 
   MDNodeKeyImpl(Metadata *Scope, MDString *Name, MDString *LinkageName,
-                Metadata *File, unsigned Line, unsigned AddressSpace, Metadata *Type,
+                Metadata *File, unsigned Line, Metadata *Type,
                 bool IsLocalToUnit, bool IsDefinition,
                 Metadata *StaticDataMemberDeclaration, uint32_t AlignInBits)
       : Scope(Scope), Name(Name), LinkageName(LinkageName), File(File),
-        Line(Line), AddressSpace(AddressSpace), Type(Type), IsLocalToUnit(IsLocalToUnit),
+        Line(Line), Type(Type), IsLocalToUnit(IsLocalToUnit),
         IsDefinition(IsDefinition),
         StaticDataMemberDeclaration(StaticDataMemberDeclaration),
         AlignInBits(AlignInBits) {}
   MDNodeKeyImpl(const DIGlobalVariable *N)
       : Scope(N->getRawScope()), Name(N->getRawName()),
         LinkageName(N->getRawLinkageName()), File(N->getRawFile()),
-        Line(N->getLine()), AddressSpace(N->getAddressSpace()), Type(N->getRawType()),
+        Line(N->getLine()), Type(N->getRawType()),
         IsLocalToUnit(N->isLocalToUnit()), IsDefinition(N->isDefinition()),
         StaticDataMemberDeclaration(N->getRawStaticDataMemberDeclaration()),
         AlignInBits(N->getAlignInBits()) {}
@@ -788,7 +787,6 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
     return Scope == RHS->getRawScope() && Name == RHS->getRawName() &&
            LinkageName == RHS->getRawLinkageName() &&
            File == RHS->getRawFile() && Line == RHS->getLine() &&
-           AddressSpace == RHS->getAddressSpace() &&
            Type == RHS->getRawType() && IsLocalToUnit == RHS->isLocalToUnit() &&
            IsDefinition == RHS->isDefinition() &&
            StaticDataMemberDeclaration ==
@@ -803,7 +801,7 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
     // clang/test/CodeGen/debug-info-257-args.c is an example of this problem,
     // generated IR is random for each run and test fails with Align included.
     // TODO: make hashing work fine with such situations
-    return hash_combine(Scope, Name, LinkageName, File, Line, AddressSpace, Type,
+    return hash_combine(Scope, Name, LinkageName, File, Line, Type,
                         IsLocalToUnit, IsDefinition, /* AlignInBits, */
                         StaticDataMemberDeclaration);
   }
@@ -814,26 +812,24 @@ template <> struct MDNodeKeyImpl<DILocalVariable> {
   MDString *Name;
   Metadata *File;
   unsigned Line;
-  unsigned AddressSpace;
   Metadata *Type;
   unsigned Arg;
   unsigned Flags;
   uint32_t AlignInBits;
 
   MDNodeKeyImpl(Metadata *Scope, MDString *Name, Metadata *File, unsigned Line,
-                unsigned AddressSpace, Metadata *Type, unsigned Arg, unsigned Flags,
+                Metadata *Type, unsigned Arg, unsigned Flags,
                 uint32_t AlignInBits)
-      : Scope(Scope), Name(Name), File(File), Line(Line), AddressSpace(AddressSpace), Type(Type), Arg(Arg),
+      : Scope(Scope), Name(Name), File(File), Line(Line), Type(Type), Arg(Arg),
         Flags(Flags), AlignInBits(AlignInBits) {}
   MDNodeKeyImpl(const DILocalVariable *N)
       : Scope(N->getRawScope()), Name(N->getRawName()), File(N->getRawFile()),
-        Line(N->getLine()), AddressSpace(N->getAddressSpace()), Type(N->getRawType()), Arg(N->getArg()),
+        Line(N->getLine()), Type(N->getRawType()), Arg(N->getArg()),
         Flags(N->getFlags()), AlignInBits(N->getAlignInBits()) {}
 
   bool isKeyOf(const DILocalVariable *RHS) const {
     return Scope == RHS->getRawScope() && Name == RHS->getRawName() &&
            File == RHS->getRawFile() && Line == RHS->getLine() &&
-           AddressSpace == RHS->getAddressSpace() &&
            Type == RHS->getRawType() && Arg == RHS->getArg() &&
            Flags == RHS->getFlags() && AlignInBits == RHS->getAlignInBits();
   }
@@ -845,7 +841,7 @@ template <> struct MDNodeKeyImpl<DILocalVariable> {
     // clang/test/CodeGen/debug-info-257-args.c is an example of this problem,
     // generated IR is random for each run and test fails with Align included.
     // TODO: make hashing work fine with such situations
-    return hash_combine(Scope, Name, File, Line, AddressSpace, Type, Arg, Flags);
+    return hash_combine(Scope, Name, File, Line, Type, Arg, Flags);
   }
 };
 

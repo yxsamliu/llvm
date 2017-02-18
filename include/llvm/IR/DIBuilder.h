@@ -138,11 +138,9 @@ namespace llvm {
     /// \param PointeeTy   Type pointed by this pointer.
     /// \param SizeInBits  Size.
     /// \param AlignInBits Alignment. (optional)
-    /// \param AddressSpace Address space. (optional)
     /// \param Name        Pointer type name. (optional)
     DIDerivedType *createPointerType(DIType *PointeeTy, uint64_t SizeInBits,
                                      uint32_t AlignInBits = 0,
-                                     unsigned AddressSpace = 0,
                                      StringRef Name = "");
 
     /// Create debugging information entry for a pointer to member.
@@ -452,23 +450,22 @@ namespace llvm {
     DISubrange *getOrCreateSubrange(int64_t Lo, int64_t Count);
 
     /// Create a new descriptor for the specified variable.
-    /// \param Context       Variable scope.
-    /// \param Name          Name of the variable.
-    /// \param LinkageName   Mangled  name of the variable.
-    /// \param File          File where this variable is defined.
-    /// \param LineNo        Line number.
-    /// \param AddressSpace  Variable address space.
-    /// \param Ty            Variable Type.
+    /// \param Context     Variable scope.
+    /// \param Name        Name of the variable.
+    /// \param LinkageName Mangled  name of the variable.
+    /// \param File        File where this variable is defined.
+    /// \param LineNo      Line number.
+    /// \param Ty          Variable Type.
     /// \param isLocalToUnit Boolean flag indicate whether this variable is
     ///                      externally visible or not.
-    /// \param Expr          The location of the global relative to the attached
-    ///                      GlobalVariable.
-    /// \param Decl          Reference to the corresponding declaration.
+    /// \param Expr        The location of the global relative to the attached
+    ///                    GlobalVariable.
+    /// \param Decl        Reference to the corresponding declaration.
     /// \param AlignInBits Variable alignment(or 0 if no alignment attr was
     ///                    specified)
     DIGlobalVariableExpression *createGlobalVariableExpression(
         DIScope *Context, StringRef Name, StringRef LinkageName, DIFile *File,
-        unsigned LineNo, unsigned AddressSpace, DIType *Ty, bool isLocalToUnit,
+        unsigned LineNo, DIType *Ty, bool isLocalToUnit,
         DIExpression *Expr = nullptr, MDNode *Decl = nullptr,
         uint32_t AlignInBits = 0);
 
@@ -476,7 +473,7 @@ namespace llvm {
     /// except that the resulting DbgNode is temporary and meant to be RAUWed.
     DIGlobalVariable *createTempGlobalVariableFwdDecl(
         DIScope *Context, StringRef Name, StringRef LinkageName, DIFile *File,
-        unsigned LineNo, unsigned AddressSpace, DIType *Ty, bool isLocalToUnit, MDNode *Decl = nullptr,
+        unsigned LineNo, DIType *Ty, bool isLocalToUnit, MDNode *Decl = nullptr,
         uint32_t AlignInBits = 0);
 
     /// Create a new descriptor for an auto variable.  This is a local variable
@@ -489,8 +486,7 @@ namespace llvm {
     /// containing subprogram, and will survive some optimizations.
     DILocalVariable *
     createAutoVariable(DIScope *Scope, StringRef Name, DIFile *File,
-                       unsigned LineNo, unsigned AddressSpace, DIType *Ty,
-                       bool AlwaysPreserve = false,
+                       unsigned LineNo, DIType *Ty, bool AlwaysPreserve = false,
                        DINode::DIFlags Flags = DINode::FlagZero,
                        uint32_t AlignInBits = 0);
 
@@ -507,8 +503,7 @@ namespace llvm {
     /// containing subprogram, and will survive some optimizations.
     DILocalVariable *
     createParameterVariable(DIScope *Scope, StringRef Name, unsigned ArgNo,
-                            DIFile *File, unsigned LineNo,
-                            unsigned AddressSpace, DIType *Ty,
+                            DIFile *File, unsigned LineNo, DIType *Ty,
                             bool AlwaysPreserve = false,
                             DINode::DIFlags Flags = DINode::FlagZero);
 

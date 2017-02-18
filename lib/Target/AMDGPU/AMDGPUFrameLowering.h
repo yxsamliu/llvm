@@ -40,12 +40,6 @@ public:
   bool hasFP(const MachineFunction &MF) const override {
     return false;
   }
-
-  bool targetUsesAddressSpace() const {
-    return true;
-  }
-
-  int getFrameIndexOffset(const MachineFunction &MF, int FI) const;
 };
 
 } // end namespace llvm

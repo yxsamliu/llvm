@@ -513,27 +513,26 @@ DITemplateValueParameter *DITemplateValueParameter::getImpl(
 DIGlobalVariable *
 DIGlobalVariable::getImpl(LLVMContext &Context, Metadata *Scope, MDString *Name,
                           MDString *LinkageName, Metadata *File, unsigned Line,
-                          unsigned AddressSpace, Metadata *Type,
-                          bool IsLocalToUnit, bool IsDefinition,
+                          Metadata *Type, bool IsLocalToUnit, bool IsDefinition,
                           Metadata *StaticDataMemberDeclaration,
                           uint32_t AlignInBits, StorageType Storage,
                           bool ShouldCreate) {
   assert(isCanonical(Name) && "Expected canonical MDString");
   assert(isCanonical(LinkageName) && "Expected canonical MDString");
   DEFINE_GETIMPL_LOOKUP(DIGlobalVariable,
-                        (Scope, Name, LinkageName, File, Line, AddressSpace, Type,
+                        (Scope, Name, LinkageName, File, Line, Type,
                          IsLocalToUnit, IsDefinition,
                          StaticDataMemberDeclaration, AlignInBits));
   Metadata *Ops[] = {
       Scope, Name, File, Type, Name, LinkageName, StaticDataMemberDeclaration};
   DEFINE_GETIMPL_STORE(DIGlobalVariable,
-                       (Line, AddressSpace, IsLocalToUnit, IsDefinition, AlignInBits),
+                       (Line, IsLocalToUnit, IsDefinition, AlignInBits),
                        Ops);
 }
 
 DILocalVariable *DILocalVariable::getImpl(LLVMContext &Context, Metadata *Scope,
                                           MDString *Name, Metadata *File,
-                                          unsigned Line, unsigned AddressSpace, Metadata *Type,
+                                          unsigned Line, Metadata *Type,
                                           unsigned Arg, DIFlags Flags,
                                           uint32_t AlignInBits,
                                           StorageType Storage,
@@ -544,10 +543,10 @@ DILocalVariable *DILocalVariable::getImpl(LLVMContext &Context, Metadata *Scope,
   assert(Scope && "Expected scope");
   assert(isCanonical(Name) && "Expected canonical MDString");
   DEFINE_GETIMPL_LOOKUP(DILocalVariable,
-                        (Scope, Name, File, Line, AddressSpace, Type, Arg, Flags,
+                        (Scope, Name, File, Line, Type, Arg, Flags,
                          AlignInBits));
   Metadata *Ops[] = {Scope, Name, File, Type};
-  DEFINE_GETIMPL_STORE(DILocalVariable, (Line, AddressSpace, Arg, Flags, AlignInBits), Ops);
+  DEFINE_GETIMPL_STORE(DILocalVariable, (Line, Arg, Flags, AlignInBits), Ops);
 }
 
 DIExpression *DIExpression::getImpl(LLVMContext &Context,
