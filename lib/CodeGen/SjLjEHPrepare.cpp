@@ -174,8 +174,8 @@ Value *SjLjEHPrepare::setupFunctionContext(Function &F,
   // because the value needs to be added to the global context list.
   auto &DL = F.getParent()->getDataLayout();
   unsigned Align = DL.getPrefTypeAlignment(FunctionContextTy);
-  FuncCtx = new AllocaInst(FunctionContextTy, nullptr, Align, "fn_context",
-                           &EntryBB->front());
+  FuncCtx = new AllocaInst(FunctionContextTy, DL.getStackAddrSpace(),
+                           nullptr, Align, "fn_context", &EntryBB->front());
 
   // Fill in the function context structure.
   for (LandingPadInst *LPI : LPads) {

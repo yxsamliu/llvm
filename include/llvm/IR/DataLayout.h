@@ -104,6 +104,7 @@ private:
   /// Defaults to false.
   bool BigEndian;
 
+  unsigned StackAddrSpace;
   unsigned StackNaturalAlign;
 
   enum ManglingModeT {
@@ -199,6 +200,7 @@ public:
     clear();
     StringRepresentation = DL.StringRepresentation;
     BigEndian = DL.isBigEndian();
+    StackAddrSpace = DL.StackAddrSpace;
     StackNaturalAlign = DL.StackNaturalAlign;
     ManglingMode = DL.ManglingMode;
     LegalIntWidths = DL.LegalIntWidths;
@@ -254,6 +256,7 @@ public:
   }
 
   unsigned getStackAlignment() const { return StackNaturalAlign; }
+  unsigned getStackAddrSpace() const { return StackAddrSpace; }
 
   bool hasMicrosoftFastStdCallMangling() const {
     return ManglingMode == MM_WinCOFFX86;
