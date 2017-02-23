@@ -88,12 +88,12 @@ entry:
 ; A8-NEXT: str [[FIELD1]], {{\[}}[[BASE]]{{\]}}
 ; CONSERVATIVE-NOT: ldrd
   %orig_blocks = alloca [256 x i16], align 2
-  %0 = bitcast [256 x i16]* %orig_blocks to i8*call void @llvm.lifetime.start(i64 512, i8* %0) nounwind
+  %0 = bitcast [256 x i16]* %orig_blocks to i8*call void @llvm.lifetime.start.p0i8(i64 512, i8* %0) nounwind
   %tmp1 = load i32, i32* getelementptr inbounds (%struct.Test, %struct.Test* @TestVar, i32 0, i32 1), align 4
   %tmp2 = load i32, i32* getelementptr inbounds (%struct.Test, %struct.Test* @TestVar, i32 0, i32 2), align 4
   %add = add nsw i32 %tmp2, %tmp1
   store i32 %add, i32* getelementptr inbounds (%struct.Test, %struct.Test* @TestVar, i32 0, i32 0), align 4
-  call void @llvm.lifetime.end(i64 512, i8* %0) nounwind
+  call void @llvm.lifetime.end.p0i8(i64 512, i8* %0) nounwind
   ret void
 }
 
@@ -189,5 +189,5 @@ define i32* @strd_postupdate_inc(i32* %p0, i32 %v0, i32 %v1) "no-frame-pointer-e
   ret i32* %p1
 }
 
-declare void @llvm.lifetime.start(i64, i8* nocapture) nounwind
-declare void @llvm.lifetime.end(i64, i8* nocapture) nounwind
+declare void @llvm.lifetime.start.p0i8(i64, i8* nocapture) nounwind
+declare void @llvm.lifetime.end.p0i8(i64, i8* nocapture) nounwind
