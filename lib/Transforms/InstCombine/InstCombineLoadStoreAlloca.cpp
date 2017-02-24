@@ -225,6 +225,7 @@ static Instruction *simplifyAllocaArraySize(InstCombiner &IC, AllocaInst &AI) {
   return nullptr;
 }
 
+namespace {
 // If I and V are pointers in different address space, it is not allowed to
 // use replaceAllUsesWith since I and V have different types. A
 // non-target-specific transformation should not use addrspacecast on V since
@@ -249,6 +250,7 @@ private:
   MapVector<Value *, Value *> WorkMap;
   InstCombiner &IC;
 };
+} // end anonymous namespace
 
 void PointerReplacer::findLoadAndReplace(Instruction &I) {
   for (auto U : I.users()) {
@@ -314,10 +316,12 @@ void PointerReplacer::replace(Instruction *I) {
 }
 
 void PointerReplacer::replacePointer(Instruction &I, Value *V) {
+#ifndef NDEBUG
   auto *PT = cast<PointerType>(I.getType());
   auto *NT = cast<PointerType>(V->getType());
   assert(PT != NT && PT->getElementType() == NT->getElementType() &&
          "Invalid usage");
+#endif
   WorkMap[&I] = V;
   findLoadAndReplace(I);
 }
@@ -611,7 +615,8 @@ static Instruction *combineLoadToOperationType(InstCombiner &IC, LoadInst &LI) {
       !DL.isNonIntegralPointerType(Ty)) {
     if (all_of(LI.users(), [&LI](User *U) {
           auto *SI = dyn_cast<StoreInst>(U);
-          return SI && SI->getPointerOperand() != &LI;
+          return SI && SI->getPointerOperand() != &LI &&
+                 !SI->getPointerOperand()->isSwiftError();
         })) {
       LoadInst *NewLoad = combineLoadToNewType(
           IC, LI,
@@ -716,7 +721,7 @@ static Instruction *unpackLoadToAggregate(InstCombiner &IC, LoadInst &LI) {
     // arrays of arbitrary size but this has a terrible impact on compile time.
     // The threshold here is chosen arbitrarily, maybe needs a little bit of
     // tuning.
-    if (NumElements > 1024)
+    if (NumElements > IC.MaxArraySizeForCombine)
       return nullptr;
 
     const DataLayout &DL = IC.getDataLayout();
@@ -959,20 +964,10 @@ Instruction *InstCombiner::visitLoadInst(LoadInst &LI) {
   // separated by a few arithmetic operations.
   BasicBlock::iterator BBI(LI);
   bool IsLoadCSE = false;
-  if (Value *AvailableVal =
-      FindAvailableLoadedValue(&LI, LI.getParent(), BBI,
-                               DefMaxInstsToScan, AA, &IsLoadCSE)) {
-    if (IsLoadCSE) {
-      LoadInst *NLI = cast<LoadInst>(AvailableVal);
-      unsigned KnownIDs[] = {
-          LLVMContext::MD_tbaa,            LLVMContext::MD_alias_scope,
-          LLVMContext::MD_noalias,         LLVMContext::MD_range,
-          LLVMContext::MD_invariant_load,  LLVMContext::MD_nonnull,
-          LLVMContext::MD_invariant_group, LLVMContext::MD_align,
-          LLVMContext::MD_dereferenceable,
-          LLVMContext::MD_dereferenceable_or_null};
-      combineMetadata(NLI, &LI, KnownIDs);
-    };
+  if (Value *AvailableVal = FindAvailableLoadedValue(
+          &LI, LI.getParent(), BBI, DefMaxInstsToScan, AA, &IsLoadCSE)) {
+    if (IsLoadCSE)
+      combineMetadataForCSE(cast<LoadInst>(AvailableVal), &LI);
 
     return replaceInstUsesWith(
         LI, Builder->CreateBitOrPointerCast(AvailableVal, LI.getType(),
@@ -1231,7 +1226,7 @@ static bool unpackStoreToAggregate(InstCombiner &IC, StoreInst &SI) {
     // arrays of arbitrary size but this has a terrible impact on compile time.
     // The threshold here is chosen arbitrarily, maybe needs a little bit of
     // tuning.
-    if (NumElements > 1024)
+    if (NumElements > IC.MaxArraySizeForCombine)
       return false;
 
     const DataLayout &DL = IC.getDataLayout();
@@ -1386,8 +1381,8 @@ Instruction *InstCombiner::visitStoreInst(StoreInst &SI) {
       break;
     }
 
-    // Don't skip over loads or things that can modify memory.
-    if (BBI->mayWriteToMemory() || BBI->mayReadFromMemory())
+    // Don't skip over loads, throws or things that can modify memory.
+    if (BBI->mayWriteToMemory() || BBI->mayReadFromMemory() || BBI->mayThrow())
       break;
   }
 
@@ -1510,8 +1505,8 @@ bool InstCombiner::SimplifyStoreAtEndOfBlock(StoreInst &SI) {
       }
       // If we find something that may be using or overwriting the stored
       // value, or if we run out of instructions, we can't do the xform.
-      if (BBI->mayReadFromMemory() || BBI->mayWriteToMemory() ||
-          BBI == OtherBB->begin())
+      if (BBI->mayReadFromMemory() || BBI->mayThrow() ||
+          BBI->mayWriteToMemory() || BBI == OtherBB->begin())
         return false;
     }
 
@@ -1520,7 +1515,7 @@ bool InstCombiner::SimplifyStoreAtEndOfBlock(StoreInst &SI) {
     // StoreBB.
     for (BasicBlock::iterator I = StoreBB->begin(); &*I != &SI; ++I) {
       // FIXME: This should really be AA driven.
-      if (I->mayReadFromMemory() || I->mayWriteToMemory())
+      if (I->mayReadFromMemory() || I->mayThrow() || I->mayWriteToMemory())
         return false;
     }
   }
@@ -1543,7 +1538,9 @@ bool InstCombiner::SimplifyStoreAtEndOfBlock(StoreInst &SI) {
                                    SI.getOrdering(),
                                    SI.getSynchScope());
   InsertNewInstBefore(NewSI, *BBI);
-  NewSI->setDebugLoc(OtherStore->getDebugLoc());
+  // The debug locations of the original instructions might differ; merge them.
+  NewSI->setDebugLoc(DILocation::getMergedLocation(SI.getDebugLoc(),
+                                                   OtherStore->getDebugLoc()));
 
   // If the two stores had AA tags, merge them.
   AAMDNodes AATags;
