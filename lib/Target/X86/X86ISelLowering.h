@@ -179,7 +179,7 @@ namespace llvm {
 
       /// Insert the lower 16-bits of a 32-bit value to a vector,
       /// corresponds to X86::PINSRW.
-      PINSRW, MMX_PINSRW,
+      PINSRW,
 
       /// Shuffle 16 8-bit values within a vector.
       PSHUFB,
@@ -195,9 +195,9 @@ namespace llvm {
       /// Blend where the selector is an immediate.
       BLENDI,
 
-      /// Blend where the condition has been shrunk.
-      /// This is used to emphasize that the condition mask is
-      /// no more valid for generic VSELECT optimizations.
+      /// Dynamic (non-constant condition) vector blend where only the sign bits
+      /// of the condition elements are used. This is used to enforce that the
+      /// condition mask is not valid for generic VSELECT optimizations.
       SHRUNKBLEND,
 
       /// Combined add and sub on an FP vector.
@@ -250,6 +250,9 @@ namespace llvm {
 
       /// Commutative FMIN and FMAX.
       FMAXC, FMINC,
+
+      /// Scalar intrinsic floating point max and min.
+      FMAXS, FMINS,
 
       /// Floating point reciprocal-sqrt and reciprocal approximation.
       /// Note that these typically require refinement
@@ -319,6 +322,9 @@ namespace llvm {
 
       // Vector shift elements by immediate
       VSHLI, VSRLI, VSRAI,
+
+      // Shifts of mask registers.
+      KSHIFTL, KSHIFTR,
 
       // Bit rotate by immediate
       VROTLI, VROTRI,
@@ -443,8 +449,7 @@ namespace llvm {
       // Broadcast subvector to vector.
       SUBV_BROADCAST,
 
-      // Insert/Extract vector element.
-      VINSERT,
+      // Extract vector element.
       VEXTRACT,
 
       /// SSE4A Extraction and Insertion.
@@ -790,25 +795,23 @@ namespace llvm {
       return VT == MVT::f32 || VT == MVT::f64 || VT.isVector();
     }
 
-    bool isMultiStoresCheaperThanBitsMerge(SDValue Lo,
-                                           SDValue Hi) const override {
+    bool isMultiStoresCheaperThanBitsMerge(EVT LTy, EVT HTy) const override {
       // If the pair to store is a mixture of float and int values, we will
       // save two bitwise instructions and one float-to-int instruction and
       // increase one store instruction. There is potentially a more
       // significant benefit because it avoids the float->int domain switch
       // for input value. So It is more likely a win.
-      if (Lo.getOpcode() == ISD::BITCAST || Hi.getOpcode() == ISD::BITCAST) {
-        SDValue Opd = (Lo.getOpcode() == ISD::BITCAST) ? Lo.getOperand(0)
-                                                       : Hi.getOperand(0);
-        if (Opd.getValueType().isFloatingPoint())
-          return true;
-      }
+      if ((LTy.isFloatingPoint() && HTy.isInteger()) ||
+          (LTy.isInteger() && HTy.isFloatingPoint()))
+        return true;
       // If the pair only contains int values, we will save two bitwise
       // instructions and increase one store instruction (costing one more
       // store buffer). Since the benefit is more blurred so we leave
       // such pair out until we get testcase to prove it is a win.
       return false;
     }
+
+    bool isMaskAndCmp0FoldingBeneficial(const Instruction &AndI) const override;
 
     bool hasAndNotCompare(SDValue Y) const override;
 
