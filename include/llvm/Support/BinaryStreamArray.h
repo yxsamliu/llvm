@@ -7,12 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_DEBUGINFO_MSF_BINARYSTREAMARRAY_H
-#define LLVM_DEBUGINFO_MSF_BINARYSTREAMARRAY_H
+#ifndef LLVM_SUPPORT_BINARYSTREAMARRAY_H
+#define LLVM_SUPPORT_BINARYSTREAMARRAY_H
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/iterator.h"
-#include "llvm/DebugInfo/MSF/BinaryStreamRef.h"
+#include "llvm/Support/BinaryStreamRef.h"
 #include "llvm/Support/Error.h"
 #include <cassert>
 #include <cstdint>
@@ -243,6 +243,7 @@ public:
       // an exact multiple of the element size.
       consumeError(std::move(EC));
     }
+    assert(llvm::alignmentAdjustment(Data.data(), alignof(T)) == 0);
     return *reinterpret_cast<const T *>(Data.data());
   }
 
@@ -316,4 +317,4 @@ private:
 
 } // namespace llvm
 
-#endif // LLVM_DEBUGINFO_MSF_BINARYSTREAMARRAY_H
+#endif // LLVM_SUPPORT_BINARYSTREAMARRAY_H
