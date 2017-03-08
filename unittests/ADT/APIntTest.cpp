@@ -761,6 +761,126 @@ TEST(APIntTest, rvalue_arithmetic) {
   }
 }
 
+TEST(APIntTest, rvalue_bitwise) {
+  // Test all combinations of lvalue/rvalue lhs/rhs of and/or/xor
+
+  // Lamdba to return an APInt by value, but also provide the raw value of the
+  // allocated data.
+  auto getRValue = [](const char *HexString, uint64_t const *&RawData) {
+    APInt V(129, HexString, 16);
+    RawData = V.getRawData();
+    return V;
+  };
+
+  APInt Ten(129, "A", 16);
+  APInt Twelve(129, "C", 16);
+
+  const uint64_t *RawDataL = nullptr;
+  const uint64_t *RawDataR = nullptr;
+
+  {
+    // 12 & 10 = 8
+    APInt AndLL = Ten & Twelve;
+    EXPECT_EQ(AndLL, 0x8);
+
+    APInt AndLR = Ten & getRValue("C", RawDataR);
+    EXPECT_EQ(AndLR, 0x8);
+    EXPECT_EQ(AndLR.getRawData(), RawDataR);
+
+    APInt AndRL = getRValue("A", RawDataL) & Twelve;
+    EXPECT_EQ(AndRL, 0x8);
+    EXPECT_EQ(AndRL.getRawData(), RawDataL);
+
+    APInt AndRR = getRValue("A", RawDataL) & getRValue("C", RawDataR);
+    EXPECT_EQ(AndRR, 0x8);
+    EXPECT_EQ(AndRR.getRawData(), RawDataR);
+
+    // LValue's and constants
+    APInt AndLK = Ten & 0xc;
+    EXPECT_EQ(AndLK, 0x8);
+
+    APInt AndKL = 0xa & Twelve;
+    EXPECT_EQ(AndKL, 0x8);
+
+    // RValue's and constants
+    APInt AndRK = getRValue("A", RawDataL) & 0xc;
+    EXPECT_EQ(AndRK, 0x8);
+    EXPECT_EQ(AndRK.getRawData(), RawDataL);
+
+    APInt AndKR = 0xa & getRValue("C", RawDataR);
+    EXPECT_EQ(AndKR, 0x8);
+    EXPECT_EQ(AndKR.getRawData(), RawDataR);
+  }
+
+  {
+    // 12 | 10 = 14
+    APInt OrLL = Ten | Twelve;
+    EXPECT_EQ(OrLL, 0xe);
+
+    APInt OrLR = Ten | getRValue("C", RawDataR);
+    EXPECT_EQ(OrLR, 0xe);
+    EXPECT_EQ(OrLR.getRawData(), RawDataR);
+
+    APInt OrRL = getRValue("A", RawDataL) | Twelve;
+    EXPECT_EQ(OrRL, 0xe);
+    EXPECT_EQ(OrRL.getRawData(), RawDataL);
+
+    APInt OrRR = getRValue("A", RawDataL) | getRValue("C", RawDataR);
+    EXPECT_EQ(OrRR, 0xe);
+    EXPECT_EQ(OrRR.getRawData(), RawDataR);
+
+    // LValue's and constants
+    APInt OrLK = Ten | 0xc;
+    EXPECT_EQ(OrLK, 0xe);
+
+    APInt OrKL = 0xa | Twelve;
+    EXPECT_EQ(OrKL, 0xe);
+
+    // RValue's and constants
+    APInt OrRK = getRValue("A", RawDataL) | 0xc;
+    EXPECT_EQ(OrRK, 0xe);
+    EXPECT_EQ(OrRK.getRawData(), RawDataL);
+
+    APInt OrKR = 0xa | getRValue("C", RawDataR);
+    EXPECT_EQ(OrKR, 0xe);
+    EXPECT_EQ(OrKR.getRawData(), RawDataR);
+  }
+
+  {
+    // 12 ^ 10 = 6
+    APInt XorLL = Ten ^ Twelve;
+    EXPECT_EQ(XorLL, 0x6);
+
+    APInt XorLR = Ten ^ getRValue("C", RawDataR);
+    EXPECT_EQ(XorLR, 0x6);
+    EXPECT_EQ(XorLR.getRawData(), RawDataR);
+
+    APInt XorRL = getRValue("A", RawDataL) ^ Twelve;
+    EXPECT_EQ(XorRL, 0x6);
+    EXPECT_EQ(XorRL.getRawData(), RawDataL);
+
+    APInt XorRR = getRValue("A", RawDataL) ^ getRValue("C", RawDataR);
+    EXPECT_EQ(XorRR, 0x6);
+    EXPECT_EQ(XorRR.getRawData(), RawDataR);
+
+    // LValue's and constants
+    APInt XorLK = Ten ^ 0xc;
+    EXPECT_EQ(XorLK, 0x6);
+
+    APInt XorKL = 0xa ^ Twelve;
+    EXPECT_EQ(XorKL, 0x6);
+
+    // RValue's and constants
+    APInt XorRK = getRValue("A", RawDataL) ^ 0xc;
+    EXPECT_EQ(XorRK, 0x6);
+    EXPECT_EQ(XorRK.getRawData(), RawDataL);
+
+    APInt XorKR = 0xa ^ getRValue("C", RawDataR);
+    EXPECT_EQ(XorKR, 0x6);
+    EXPECT_EQ(XorKR.getRawData(), RawDataR);
+  }
+}
+
 TEST(APIntTest, rvalue_invert) {
   // Lamdba to return an APInt by value, but also provide the raw value of the
   // allocated data.
@@ -901,7 +1021,6 @@ TEST(APIntTest, fromString) {
   EXPECT_EQ(APInt(32, uint64_t(-3LL)), APInt(32,  "-11", 2));
   EXPECT_EQ(APInt(32, uint64_t(-4LL)), APInt(32, "-100", 2));
 
-
   EXPECT_EQ(APInt(32,  0), APInt(32,  "0",  8));
   EXPECT_EQ(APInt(32,  1), APInt(32,  "1",  8));
   EXPECT_EQ(APInt(32,  7), APInt(32,  "7",  8));
@@ -923,7 +1042,6 @@ TEST(APIntTest, fromString) {
   EXPECT_EQ(APInt(32, uint64_t(-15LL)), APInt(32,  "-17", 8));
   EXPECT_EQ(APInt(32, uint64_t(-16LL)), APInt(32,  "-20", 8));
 
-
   EXPECT_EQ(APInt(32,  0), APInt(32,  "0", 10));
   EXPECT_EQ(APInt(32,  1), APInt(32,  "1", 10));
   EXPECT_EQ(APInt(32,  9), APInt(32,  "9", 10));
@@ -937,7 +1055,6 @@ TEST(APIntTest, fromString) {
   EXPECT_EQ(APInt(32, uint64_t(-10LL)), APInt(32, "-10", 10));
   EXPECT_EQ(APInt(32, uint64_t(-19LL)), APInt(32, "-19", 10));
   EXPECT_EQ(APInt(32, uint64_t(-20LL)), APInt(32, "-20", 10));
-
 
   EXPECT_EQ(APInt(32,  0), APInt(32,  "0", 16));
   EXPECT_EQ(APInt(32,  1), APInt(32,  "1", 16));
@@ -959,7 +1076,7 @@ TEST(APIntTest, fromString) {
   EXPECT_EQ(APInt(32, 36), APInt(32, "10", 36));
   EXPECT_EQ(APInt(32, 71), APInt(32, "1Z", 36));
   EXPECT_EQ(APInt(32, 72), APInt(32, "20", 36));
-  
+
   EXPECT_EQ(APInt(32,  uint64_t(-0LL)), APInt(32,  "-0", 36));
   EXPECT_EQ(APInt(32,  uint64_t(-1LL)), APInt(32,  "-1", 36));
   EXPECT_EQ(APInt(32, uint64_t(-35LL)), APInt(32,  "-Z", 36));
