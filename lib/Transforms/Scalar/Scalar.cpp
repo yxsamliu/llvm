@@ -67,6 +67,7 @@ void llvm::initializeScalarOpts(PassRegistry &Registry) {
   initializeLoopUnswitchPass(Registry);
   initializeLoopVersioningLICMPass(Registry);
   initializeLoopIdiomRecognizeLegacyPassPass(Registry);
+  initializeLowerAllocaPass(Registry);
   initializeLowerAtomicLegacyPassPass(Registry);
   initializeLowerExpectIntrinsicPass(Registry);
   initializeLowerGuardIntrinsicLegacyPassPass(Registry);
