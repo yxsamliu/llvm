@@ -294,6 +294,7 @@ InferAddressSpaces::collectFlatAddressExpressions(Function &F) const {
   // We only explore address expressions that are reachable from loads and
   // stores for now because we aim at generating faster loads and stores.
   for (Instruction &I : instructions(F)) {
+    DEBUG(dbgs() << "check: " << I << '\n');
     if (auto *LI = dyn_cast<LoadInst>(&I))
       PushPtrOperand(LI->getPointerOperand());
     else if (auto *SI = dyn_cast<StoreInst>(&I))
@@ -670,18 +671,17 @@ static bool isSimplePointerUseValidToReplace(Use &U) {
   User *Inst = U.getUser();
   unsigned OpNo = U.getOperandNo();
 
-  if (auto *LI = dyn_cast<LoadInst>(Inst))
-    return OpNo == LoadInst::getPointerOperandIndex() && !LI->isVolatile();
+  if (isa<LoadInst>(Inst))
+    return OpNo == LoadInst::getPointerOperandIndex();
 
-  if (auto *SI = dyn_cast<StoreInst>(Inst))
-    return OpNo == StoreInst::getPointerOperandIndex() && !SI->isVolatile();
+  if (isa<StoreInst>(Inst))
+    return OpNo == StoreInst::getPointerOperandIndex();
 
-  if (auto *RMW = dyn_cast<AtomicRMWInst>(Inst))
-    return OpNo == AtomicRMWInst::getPointerOperandIndex() && !RMW->isVolatile();
+  if (isa<AtomicRMWInst>(Inst))
+    return OpNo == AtomicRMWInst::getPointerOperandIndex();
 
-  if (auto *CmpX = dyn_cast<AtomicCmpXchgInst>(Inst)) {
-    return OpNo == AtomicCmpXchgInst::getPointerOperandIndex() &&
-           !CmpX->isVolatile();
+  if (isa<AtomicCmpXchgInst>(Inst)) {
+    return OpNo == AtomicCmpXchgInst::getPointerOperandIndex();
   }
 
   return false;
