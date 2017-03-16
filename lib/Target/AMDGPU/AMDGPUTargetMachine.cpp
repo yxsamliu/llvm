@@ -225,7 +225,8 @@ void AMDGPUTargetMachine::addPreLinkPasses(PassManagerBase & PM) {
   PM.add(llvm::createAMDGPUConvertAtomicLibCallsPass());
   PM.add(llvm::createAMDGPUOCL12AdapterPass());
   PM.add(llvm::createAMDGPUPrintfRuntimeBinding());
-  PM.add(llvm::createAMDGPUclpVectorExpansionPass());
+  // ToDo: Do we still need it?
+  //PM.add(llvm::createAMDGPUclpVectorExpansionPass());
 }
 
 void AMDGPUTargetMachine::adjustPassManager(PassManagerBuilder &Builder) {
@@ -512,7 +513,8 @@ void AMDGPUPassConfig::addIRPasses() {
   addPass(createAMDGPUOpenCLImageTypeLoweringPass());
 
   if (TM.getOptLevel() > CodeGenOpt::None) {
-    addPass(createAMDGPUPromoteAlloca(&TM));
+    // ToDo: Fix it so that it can handle addrspacecast to private
+    //addPass(createAMDGPUPromoteAlloca(&TM));
     addPass(createLowerAllocaPass());
     addPass(createInferAddressSpacesPass());
 
