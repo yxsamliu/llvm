@@ -2426,8 +2426,10 @@ SDValue SITargetLowering::lowerADDRSPACECAST(SDValue Op,
   if (ASC->getSrcAddressSpace() == AMDGPUAS::FLAT_ADDRESS) {
     if (ASC->getDestAddressSpace() == AMDGPUAS::PRIVATE_ADDRESS
         && Src->getOpcode() == ISD::FrameIndex) {
-      return DAG.getTargetFrameIndex(cast<FrameIndexSDNode>(Src.getNode())->
-          getIndex(), MVT::i32);
+      auto TFI = DAG.getTargetFrameIndex(cast<FrameIndexSDNode>(Src.getNode())
+          ->getIndex(), MVT::i32);
+      return SDValue(DAG.getMachineNode(AMDGPU::V_MOV_B32_e32, SL, MVT::i32,
+          TFI), 0);
     }
     if (ASC->getDestAddressSpace() == AMDGPUAS::LOCAL_ADDRESS)
       MFI.HasFlatLocalCasts = true;
