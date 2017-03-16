@@ -109,6 +109,10 @@ private:
 
   void writeHeader(const MCAssembler &Asm);
 
+  void writeValueType(wasm::ValType Ty) {
+    encodeSLEB128(int32_t(Ty), getStream());
+  }
+
   void recordRelocation(MCAssembler &Asm, const MCAsmLayout &Layout,
                         const MCFragment *Fragment, const MCFixup &Fixup,
                         MCValue Target, bool &IsPCRel,
@@ -140,7 +144,7 @@ void WasmObjectWriter::startSection(SectionBookkeeping &Section,
   assert((Name != nullptr) == (SectionId == wasm::WASM_SEC_CUSTOM) &&
          "Only custom sections can have names");
 
-  write8(SectionId);
+  encodeULEB128(SectionId, getStream());
 
   Section.SizeOffset = getStream().tell();
 
@@ -290,10 +294,10 @@ struct WasmFunctionType {
   enum { Plain, Empty, Tombstone } State;
 
   // The return types of the function.
-  SmallVector<unsigned, 1> Returns;
+  SmallVector<wasm::ValType, 1> Returns;
 
   // The parameter types of the function.
-  SmallVector<unsigned, 4> Params;
+  SmallVector<wasm::ValType, 4> Params;
 
   WasmFunctionType() : State(Plain) {}
 
@@ -317,10 +321,10 @@ struct WasmFunctionTypeDenseMapInfo {
   }
   static unsigned getHashValue(const WasmFunctionType &FuncTy) {
     uintptr_t Value = FuncTy.State;
-    for (unsigned Ret : FuncTy.Returns)
-      Value += DenseMapInfo<unsigned>::getHashValue(Ret);
-    for (unsigned Param : FuncTy.Params)
-      Value += DenseMapInfo<unsigned>::getHashValue(Param);
+    for (wasm::ValType Ret : FuncTy.Returns)
+      Value += DenseMapInfo<int32_t>::getHashValue(int32_t(Ret));
+    for (wasm::ValType Param : FuncTy.Params)
+      Value += DenseMapInfo<int32_t>::getHashValue(int32_t(Param));
     return Value;
   }
   static bool isEqual(const WasmFunctionType &LHS,
@@ -756,13 +760,13 @@ void WasmObjectWriter::writeObject(MCAssembler &Asm,
     encodeULEB128(FunctionTypes.size(), getStream());
 
     for (WasmFunctionType &FuncTy : FunctionTypes) {
-      write8(wasm::WASM_TYPE_FUNC);
+      encodeSLEB128(wasm::WASM_TYPE_FUNC, getStream());
       encodeULEB128(FuncTy.Params.size(), getStream());
-      for (unsigned Ty : FuncTy.Params)
-        write8(Ty);
+      for (wasm::ValType Ty : FuncTy.Params)
+        writeValueType(Ty);
       encodeULEB128(FuncTy.Returns.size(), getStream());
-      for (unsigned Ty : FuncTy.Returns)
-        write8(Ty);
+      for (wasm::ValType Ty : FuncTy.Returns)
+        writeValueType(Ty);
     }
 
     endSection(Section);
@@ -782,15 +786,15 @@ void WasmObjectWriter::writeObject(MCAssembler &Asm,
       encodeULEB128(FieldName.size(), getStream());
       writeBytes(FieldName);
 
-      write8(Import.Kind);
+      encodeULEB128(Import.Kind, getStream());
 
       switch (Import.Kind) {
       case wasm::WASM_EXTERNAL_FUNCTION:
         encodeULEB128(Import.Type, getStream());
         break;
       case wasm::WASM_EXTERNAL_GLOBAL:
-        write8(Import.Type);
-        write8(0); // mutability
+        encodeSLEB128(Import.Type, getStream());
+        encodeULEB128(0, getStream()); // mutability
         break;
       default:
         llvm_unreachable("unsupported import kind");
@@ -820,7 +824,7 @@ void WasmObjectWriter::writeObject(MCAssembler &Asm,
   // The number of tables, fixed to 1 for now.
   encodeULEB128(1, getStream());
 
-  write8(wasm::WASM_TYPE_ANYFUNC);
+  encodeSLEB128(wasm::WASM_TYPE_ANYFUNC, getStream());
 
   encodeULEB128(0, getStream());                 // flags
   encodeULEB128(TableElems.size(), getStream()); // initial
@@ -846,7 +850,7 @@ void WasmObjectWriter::writeObject(MCAssembler &Asm,
 
     encodeULEB128(Globals.size(), getStream());
     for (const WasmGlobal &Global : Globals) {
-      write8(Global.Type);
+      encodeSLEB128(Global.Type, getStream());
       write8(Global.IsMutable);
 
       write8(wasm::WASM_OPCODE_I32_CONST);
@@ -866,7 +870,7 @@ void WasmObjectWriter::writeObject(MCAssembler &Asm,
       encodeULEB128(Export.FieldName.size(), getStream());
       writeBytes(Export.FieldName);
 
-      write8(Export.Kind);
+      encodeSLEB128(Export.Kind, getStream());
 
       encodeULEB128(Export.Index, getStream());
     }
@@ -978,25 +982,30 @@ void WasmObjectWriter::writeObject(MCAssembler &Asm,
   }
 
   // === Name Section ==========================================================
-  if (NumFuncImports != 0 || !Functions.empty()) {
+  uint32_t TotalFunctions = NumFuncImports + Functions.size();
+  if (TotalFunctions != 0) {
     startSection(Section, wasm::WASM_SEC_CUSTOM, "name");
+    SectionBookkeeping SubSection;
+    startSection(SubSection, wasm::WASM_NAMES_FUNCTION);
 
-    encodeULEB128(NumFuncImports + Functions.size(), getStream());
+    encodeULEB128(TotalFunctions, getStream());
+    uint32_t Index = 0;
     for (const WasmImport &Import : Imports) {
       if (Import.Kind == wasm::WASM_EXTERNAL_FUNCTION) {
+        encodeULEB128(Index, getStream());
         encodeULEB128(Import.FieldName.size(), getStream());
         writeBytes(Import.FieldName);
-        encodeULEB128(0, getStream()); // local count, meaningless for imports
+        ++Index;
       }
     }
     for (const WasmFunction &Func : Functions) {
+      encodeULEB128(Index, getStream());
       encodeULEB128(Func.Sym->getName().size(), getStream());
       writeBytes(Func.Sym->getName());
-
-      // TODO: Local names.
-      encodeULEB128(0, getStream()); // local count
+      ++Index;
     }
 
+    endSection(SubSection);
     endSection(Section);
   }
 
@@ -1007,7 +1016,7 @@ void WasmObjectWriter::writeObject(MCAssembler &Asm,
   if (!CodeRelocations.empty()) {
     startSection(Section, wasm::WASM_SEC_CUSTOM, "reloc.CODE");
 
-    write8(wasm::WASM_SEC_CODE);
+    encodeULEB128(wasm::WASM_SEC_CODE, getStream());
 
     encodeULEB128(CodeRelocations.size(), getStream());
 
@@ -1020,7 +1029,7 @@ void WasmObjectWriter::writeObject(MCAssembler &Asm,
   if (!DataRelocations.empty()) {
     startSection(Section, wasm::WASM_SEC_CUSTOM, "reloc.DATA");
 
-    write8(wasm::WASM_SEC_DATA);
+    encodeULEB128(wasm::WASM_SEC_DATA, getStream());
 
     encodeULEB128(DataRelocations.size(), getStream());
 

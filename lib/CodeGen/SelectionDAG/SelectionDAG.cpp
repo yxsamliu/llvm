@@ -2251,10 +2251,9 @@ void SelectionDAG::computeKnownBits(SDValue Op, APInt &KnownZero,
                                KnownZero2.countLeadingOnes(),
                                BitWidth) - BitWidth;
 
-    TrailZ = std::min(TrailZ, BitWidth);
-    LeadZ = std::min(LeadZ, BitWidth);
-    KnownZero = APInt::getLowBitsSet(BitWidth, TrailZ) |
-                APInt::getHighBitsSet(BitWidth, LeadZ);
+    KnownZero.clearAllBits();
+    KnownZero.setLowBits(std::min(TrailZ, BitWidth));
+    KnownZero.setHighBits(std::min(LeadZ, BitWidth));
     break;
   }
   case ISD::UDIV: {
@@ -2272,7 +2271,7 @@ void SelectionDAG::computeKnownBits(SDValue Op, APInt &KnownZero,
       LeadZ = std::min(BitWidth,
                        LeadZ + BitWidth - RHSUnknownLeadingOnes - 1);
 
-    KnownZero = APInt::getHighBitsSet(BitWidth, LeadZ);
+    KnownZero.setHighBits(LeadZ);
     break;
   }
   case ISD::SELECT:
@@ -2345,13 +2344,12 @@ void SelectionDAG::computeKnownBits(SDValue Op, APInt &KnownZero,
       KnownOne  = KnownOne.lshr(*ShAmt);
       // If we know the value of the sign bit, then we know it is copied across
       // the high bits by the shift amount.
-      APInt HighBits = APInt::getHighBitsSet(BitWidth, ShAmt->getZExtValue());
       APInt SignBit = APInt::getSignBit(BitWidth);
       SignBit = SignBit.lshr(*ShAmt);  // Adjust to where it is now in the mask.
       if (KnownZero.intersects(SignBit)) {
-        KnownZero |= HighBits;  // New bits are known zero.
+        KnownZero.setHighBits(ShAmt->getZExtValue());// New bits are known zero.
       } else if (KnownOne.intersects(SignBit)) {
-        KnownOne  |= HighBits;  // New bits are known one.
+        KnownOne.setHighBits(ShAmt->getZExtValue()); // New bits are known one.
       }
     }
     break;
@@ -2396,9 +2394,7 @@ void SelectionDAG::computeKnownBits(SDValue Op, APInt &KnownZero,
   case ISD::CTLZ:
   case ISD::CTLZ_ZERO_UNDEF:
   case ISD::CTPOP: {
-    unsigned LowBits = Log2_32(BitWidth)+1;
-    KnownZero = APInt::getHighBitsSet(BitWidth, BitWidth - LowBits);
-    KnownOne.clearAllBits();
+    KnownZero.setBitsFrom(Log2_32(BitWidth)+1);
     break;
   }
   case ISD::LOAD: {
@@ -2407,7 +2403,7 @@ void SelectionDAG::computeKnownBits(SDValue Op, APInt &KnownZero,
     if (ISD::isZEXTLoad(Op.getNode()) && Op.getResNo() == 0) {
       EVT VT = LD->getMemoryVT();
       unsigned MemBits = VT.getScalarSizeInBits();
-      KnownZero |= APInt::getHighBitsSet(BitWidth, BitWidth - MemBits);
+      KnownZero.setBitsFrom(MemBits);
     } else if (const MDNode *Ranges = LD->getRanges()) {
       if (LD->getExtensionType() == ISD::NON_EXTLOAD)
         computeKnownBitsFromRangeMetadata(*Ranges, KnownZero, KnownOne);
@@ -2417,7 +2413,6 @@ void SelectionDAG::computeKnownBits(SDValue Op, APInt &KnownZero,
   case ISD::ZERO_EXTEND_VECTOR_INREG: {
     EVT InVT = Op.getOperand(0).getValueType();
     unsigned InBits = InVT.getScalarSizeInBits();
-    APInt NewBits   = APInt::getHighBitsSet(BitWidth, BitWidth - InBits);
     KnownZero = KnownZero.trunc(InBits);
     KnownOne = KnownOne.trunc(InBits);
     computeKnownBits(Op.getOperand(0), KnownZero, KnownOne,
@@ -2425,20 +2420,19 @@ void SelectionDAG::computeKnownBits(SDValue Op, APInt &KnownZero,
                      Depth + 1);
     KnownZero = KnownZero.zext(BitWidth);
     KnownOne = KnownOne.zext(BitWidth);
-    KnownZero |= NewBits;
+    KnownZero.setBitsFrom(InBits);
     break;
   }
   case ISD::ZERO_EXTEND: {
     EVT InVT = Op.getOperand(0).getValueType();
     unsigned InBits = InVT.getScalarSizeInBits();
-    APInt NewBits   = APInt::getHighBitsSet(BitWidth, BitWidth - InBits);
     KnownZero = KnownZero.trunc(InBits);
     KnownOne = KnownOne.trunc(InBits);
     computeKnownBits(Op.getOperand(0), KnownZero, KnownOne, DemandedElts,
                      Depth + 1);
     KnownZero = KnownZero.zext(BitWidth);
     KnownOne = KnownOne.zext(BitWidth);
-    KnownZero |= NewBits;
+    KnownZero.setBitsFrom(InBits);
     break;
   }
   // TODO ISD::SIGN_EXTEND_VECTOR_INREG
@@ -2488,7 +2482,7 @@ void SelectionDAG::computeKnownBits(SDValue Op, APInt &KnownZero,
   }
   case ISD::FGETSIGN:
     // All bits are zero except the low bit.
-    KnownZero = APInt::getHighBitsSet(BitWidth, BitWidth - 1);
+    KnownZero.setBitsFrom(1);
     break;
   case ISD::USUBO:
   case ISD::SSUBO:
@@ -2520,7 +2514,7 @@ void SelectionDAG::computeKnownBits(SDValue Op, APInt &KnownZero,
         if ((KnownZero2 & MaskV) == MaskV) {
           unsigned NLZ2 = CLHS->getAPIntValue().countLeadingZeros();
           // Top bits known zero.
-          KnownZero = APInt::getHighBitsSet(BitWidth, NLZ2);
+          KnownZero.setHighBits(NLZ2);
         }
       }
     }
@@ -2639,7 +2633,8 @@ void SelectionDAG::computeKnownBits(SDValue Op, APInt &KnownZero,
     uint32_t Leaders = std::max(KnownZero.countLeadingOnes(),
                                 KnownZero2.countLeadingOnes());
     KnownOne.clearAllBits();
-    KnownZero = APInt::getHighBitsSet(BitWidth, Leaders);
+    KnownZero.clearAllBits();
+    KnownZero.setHighBits(Leaders);
     break;
   }
   case ISD::EXTRACT_ELEMENT: {
@@ -2784,7 +2779,7 @@ void SelectionDAG::computeKnownBits(SDValue Op, APInt &KnownZero,
   case ISD::TargetFrameIndex:
     if (unsigned Align = InferPtrAlignment(Op)) {
       // The low bits are known zero if the pointer is aligned.
-      KnownZero = APInt::getLowBitsSet(BitWidth, Log2_32(Align));
+      KnownZero.setLowBits(Log2_32(Align));
       break;
     }
     break;
@@ -2906,9 +2901,20 @@ unsigned SelectionDAG::ComputeNumSignBits(SDValue Op, unsigned Depth) const {
   }
 
   case ISD::BUILD_VECTOR:
-    Tmp = ComputeNumSignBits(Op.getOperand(0), Depth + 1);
-    for (unsigned i = 1, e = Op.getNumOperands(); (i < e) && (Tmp > 1); ++i)
-      Tmp = std::min(Tmp, ComputeNumSignBits(Op.getOperand(i), Depth + 1));
+    Tmp = VTBits;
+    for (unsigned i = 0, e = Op.getNumOperands(); (i < e) && (Tmp > 1); ++i) {
+      SDValue SrcOp = Op.getOperand(i);
+      Tmp2 = ComputeNumSignBits(Op.getOperand(i), Depth + 1);
+
+      // BUILD_VECTOR can implicitly truncate sources, we must handle this.
+      if (SrcOp.getValueSizeInBits() != VTBits) {
+        assert(SrcOp.getValueSizeInBits() > VTBits &&
+               "Expected BUILD_VECTOR implicit truncation");
+        unsigned ExtraBits = SrcOp.getValueSizeInBits() - VTBits;
+        Tmp2 = (Tmp2 > ExtraBits ? Tmp2 - ExtraBits : 1);
+      }
+      Tmp = std::min(Tmp, Tmp2);
+    }
     return Tmp;
 
   case ISD::SIGN_EXTEND:
@@ -3336,6 +3342,9 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
       if (VT == MVT::f128 && C->getValueType(0) == MVT::i128)
         return getConstantFP(APFloat(APFloat::IEEEquad(), Val), DL, VT);
       break;
+    case ISD::ABS:
+      return getConstant(Val.abs(), DL, VT, C->isTargetOpcode(),
+                         C->isOpaque());
     case ISD::BITREVERSE:
       return getConstant(Val.reverseBits(), DL, VT, C->isTargetOpcode(),
                          C->isOpaque());
@@ -3455,6 +3464,7 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
       case ISD::TRUNCATE:
       case ISD::UINT_TO_FP:
       case ISD::SINT_TO_FP:
+      case ISD::ABS:
       case ISD::BITREVERSE:
       case ISD::BSWAP:
       case ISD::CTLZ:
@@ -3570,6 +3580,12 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
         return getNode(ISD::TRUNCATE, DL, VT, Operand.getNode()->getOperand(0));
       return Operand.getNode()->getOperand(0);
     }
+    if (OpOpcode == ISD::UNDEF)
+      return getUNDEF(VT);
+    break;
+  case ISD::ABS:
+    assert(VT.isInteger() && VT == Operand.getValueType() &&
+           "Invalid ABS!");
     if (OpOpcode == ISD::UNDEF)
       return getUNDEF(VT);
     break;
@@ -3695,12 +3711,6 @@ SDValue SelectionDAG::FoldConstantArithmetic(unsigned Opcode, const SDLoc &DL,
   if (Cst1->isOpaque() || Cst2->isOpaque())
     return SDValue();
 
-  // Division/remainder with a zero divisor is undefined behavior.
-  if ((Opcode == ISD::SDIV || Opcode == ISD::UDIV ||
-       Opcode == ISD::SREM || Opcode == ISD::UREM) &&
-      Cst2->isNullValue())
-    return getUNDEF(VT);
-
   std::pair<APInt, bool> Folded = FoldValue(Opcode, Cst1->getAPIntValue(),
                                             Cst2->getAPIntValue());
   if (!Folded.second)
@@ -3728,6 +3738,30 @@ SDValue SelectionDAG::FoldSymbolOffset(unsigned Opcode, EVT VT,
                           GA->getOffset() + uint64_t(Offset));
 }
 
+bool SelectionDAG::isUndef(unsigned Opcode, ArrayRef<SDValue> Ops) {
+  switch (Opcode) {
+  case ISD::SDIV:
+  case ISD::UDIV:
+  case ISD::SREM:
+  case ISD::UREM: {
+    // If a divisor is zero/undef or any element of a divisor vector is
+    // zero/undef, the whole op is undef.
+    assert(Ops.size() == 2 && "Div/rem should have 2 operands");
+    SDValue Divisor = Ops[1];
+    if (Divisor.isUndef() || isNullConstant(Divisor))
+      return true;
+
+    return ISD::isBuildVectorOfConstantSDNodes(Divisor.getNode()) &&
+           any_of(Divisor->op_values(),
+                  [](SDValue V) { return V.isUndef() || isNullConstant(V); });
+    // TODO: Handle signed overflow.
+  }
+  // TODO: Handle oversized shifts.
+  default:
+    return false;
+  }
+}
+
 SDValue SelectionDAG::FoldConstantArithmetic(unsigned Opcode, const SDLoc &DL,
                                              EVT VT, SDNode *Cst1,
                                              SDNode *Cst2) {
@@ -3736,6 +3770,9 @@ SDValue SelectionDAG::FoldConstantArithmetic(unsigned Opcode, const SDLoc &DL,
   // bail early.
   if (Opcode >= ISD::BUILTIN_OP_END)
     return SDValue();
+
+  if (isUndef(Opcode, {SDValue(Cst1, 0), SDValue(Cst2, 0)}))
+    return getUNDEF(VT);
 
   // Handle the case of two scalars.
   if (const ConstantSDNode *Scalar1 = dyn_cast<ConstantSDNode>(Cst1)) {
@@ -3803,6 +3840,9 @@ SDValue SelectionDAG::FoldConstantVectorArithmetic(unsigned Opcode,
   // bail early.
   if (Opcode >= ISD::BUILTIN_OP_END)
     return SDValue();
+
+  if (isUndef(Opcode, Ops))
+    return getUNDEF(VT);
 
   // We can only fold vectors - maybe merge with FoldConstantArithmetic someday?
   if (!VT.isVector())
