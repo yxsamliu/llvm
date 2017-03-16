@@ -112,10 +112,6 @@ public:
     return AMDGPUAS::PRIVATE_ADDRESS;
   }
 
-  unsigned getPrivateAddressSpace() const {
-    return AMDGPUAS::PRIVATE_ADDRESS;
-  }
-
   unsigned getVectorSplitCost() { return 0; }
 };
 
