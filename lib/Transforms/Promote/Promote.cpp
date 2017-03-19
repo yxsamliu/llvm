@@ -591,7 +591,7 @@ void nameAndMapArgs (Function * newFunc, Function * oldFunc, ValueToValueMapTy& 
              new_arg = newFunc->arg_begin(),
              last_arg = oldFunc->arg_end();
              old_arg != last_arg; ++old_arg, ++new_arg) {
-                VMap[old_arg.operator->()] = new_arg.operator->();
+                VMap[old_arg] = new_arg;
                 new_arg->setName(old_arg->getName());
 
         }
@@ -1528,9 +1528,9 @@ void updateArgUsers (Function * F, InstUpdateWorkList * updateNeeded)
         typedef Function::arg_iterator arg_iterator;
         for (arg_iterator A = F->arg_begin(), Ae = F->arg_end();
              A != Ae; ++A) {
-                if ( !hasPtrToNonZeroAddrSpace (A.operator->()) ) continue;
+                if ( !hasPtrToNonZeroAddrSpace (A) ) continue;
                 updateListWithUsers (A->user_begin(), A->user_end(),
-                                     A.operator->(), A.operator->(), updateNeeded);
+                                     A, A, updateNeeded);
         }
 }
 
@@ -1840,7 +1840,7 @@ Function * createWrappedFunction (Function * F)
         for (arg_iterator sA = F->arg_begin(), dA = wrapped->arg_begin(),
                           Ae = F->arg_end(); sA != Ae; ++sA, ++dA) {
             dA->setName (sA->getName());
-            callArgs.push_back(dA.operator->());
+            callArgs.push_back(dA);
         }
         wrapped->setAttributes (F->getAttributes());
         BasicBlock * entry = BasicBlock::Create(F->getContext(), "entry",
@@ -1869,7 +1869,7 @@ Function * createWrappedFunction (Function * F)
                 std::vector<Value *> memCpyArgs;
                 memCpyArgs.push_back (new BitCastInst (AI, castTargetType,
                                                        "", entry));
-                memCpyArgs.push_back (new BitCastInst (A.operator->(), castSrcType,
+                memCpyArgs.push_back (new BitCastInst (A, castSrcType,
                                                        "", entry));
 
                 memCpyArgs.push_back (ConstantInt::get(Int64Ty,
