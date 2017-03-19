@@ -147,6 +147,9 @@ static Function *getNewOCL20BuiltinFuncDecl(Function *OldFunc) {
     //4 is for region address AMDIL and generic address in 2.0
     NewFuncArgs.push_back(NewPtrType);
   }
+  if (NewFuncName == MangledFuncName) {
+    OldFunc->setName(MangledFuncName + ".tmp");
+  }
 
   FunctionType *NewFuncType = FunctionType::get(
       OldFunc->getReturnType(), NewFuncArgs, OldFunc->isVarArg());
