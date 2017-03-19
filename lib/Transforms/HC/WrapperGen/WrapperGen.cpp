@@ -553,8 +553,7 @@ struct StringFinder
         if(F->hasFnAttribute("hc_grid_launch") && (F->size() > 0)) {
           WrapperFunction* func = new WrapperFunction(F.operator->());
 
-          const llvm::Function::ArgumentListType &Args(F->getArgumentList());
-          for (auto i = Args.begin(), e = Args.end(); i != e; ++i) {
+          for (auto i = F->args().begin(), e = F->args().end(); i != e; ++i) {
             func->insertArgument(new WrapperArgument(*i));
           }
 
