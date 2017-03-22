@@ -389,7 +389,7 @@ static Type *getNextType(Type *CurTy, int CurVecSize, int NextVecSize,
   else
     NextTy = VectorType::get(CurEleTy, NextVecSize);
   if (IsPointer) {
-    assert('0' <= NextAddrSpace && NextAddrSpace <= '4' &&
+    assert('0' <= NextAddrSpace && NextAddrSpace <= '5' &&
            "incorrect addrspace");
     NextTy = PointerType::get(
         NextTy, NextAddrSpace == InvalidASChar ? 0 : (NextAddrSpace - '0'));

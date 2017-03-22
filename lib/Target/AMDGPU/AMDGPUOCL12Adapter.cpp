@@ -68,7 +68,8 @@ static bool isNonDefaultAddrSpacePtr(Type *Ty) {
   StructType* StrType = dyn_cast<StructType>(PtrType->getElementType());
   if(StrType && StrType->isOpaque())
     return false;
-  return (PtrType->getAddressSpace() != 4 && PtrType->getAddressSpace() != 2);
+  return (PtrType->getAddressSpace() != AMDGPUAS::FLAT_ADDRESS &&
+          PtrType->getAddressSpace() != AMDGPUAS::CONSTANT_ADDRESS);
 }
 
 /// \brief Check whether the Function signature has any of the
@@ -124,11 +125,8 @@ static Function *getNewOCL20BuiltinFuncDecl(Function *OldFunc) {
       // Skip in cases where CV qualifiers are used: r, V, K
       tmp = NewFuncName.find("U3AS", StartIndexPos);
       if (tmp!=std::string::npos && tmp <= StartIndexPos+3) {
-        NewFuncName.at(tmp+4) = '4';
-      } else {
-        NewFuncName.insert(StartIndexPos + 1, "U3AS4");
+        NewFuncName.erase(tmp, 5);
       }
-      StartIndexPos += 5;
     }
   }
 
@@ -145,9 +143,12 @@ static Function *getNewOCL20BuiltinFuncDecl(Function *OldFunc) {
 
     PointerType *PtrType = cast<PointerType>(ArgType);
     Type *EleType = PtrType->getElementType();
-    PointerType *NewPtrType = PointerType::get(EleType, 4);
+    PointerType *NewPtrType = PointerType::get(EleType, AMDGPUAS::FLAT_ADDRESS);
     //4 is for region address AMDIL and generic address in 2.0
     NewFuncArgs.push_back(NewPtrType);
+  }
+  if (NewFuncName == MangledFuncName) {
+    OldFunc->setName(MangledFuncName + ".tmp");
   }
 
   FunctionType *NewFuncType = FunctionType::get(
@@ -180,7 +181,7 @@ void createOCL20BuiltinFuncDefn(Function *OldFunc, Function *NewFunc) {
 
     PointerType *PtrType = cast<PointerType>(Arg.getType());
     Type *EleType = PtrType->getElementType();
-    PointerType *NewPtrType = PointerType::get(EleType, 4);
+    PointerType *NewPtrType = PointerType::get(EleType, AMDGPUAS::FLAT_ADDRESS);
     //4 is for region address AMDIL and generic address in 2.0
 
     // Cast all non-default addr space pointer arguments to default addr
