@@ -52,8 +52,8 @@ AliasResult AMDGPUAAResult::alias(const MemoryLocation &LocA,
   };
   unsigned asA = LocA.Ptr->getType()->getPointerAddressSpace();
   unsigned asB = LocB.Ptr->getType()->getPointerAddressSpace();
-  if (asA > AMDGPUAS::AddressSpaces::FLAT_ADDRESS ||
-      asB > AMDGPUAS::AddressSpaces::FLAT_ADDRESS)
+  if (asA > AMDGPUAS::AddressSpaces::PRIVATE_ADDRESS ||
+      asB > AMDGPUAS::AddressSpaces::PRIVATE_ADDRESS)
     report_fatal_error("Pointer address space out of range");
 
   AliasResult Result = ASAliasRules[asA][asB];
