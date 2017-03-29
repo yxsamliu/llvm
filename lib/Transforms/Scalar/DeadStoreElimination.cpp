@@ -55,6 +55,9 @@ EnablePartialOverwriteTracking("enable-dse-partial-overwrite-tracking",
   cl::init(true), cl::Hidden,
   cl::desc("Enable partial-overwrite tracking in DSE"));
 
+static cl::opt<bool>
+EnableRemoveAddrSpaceCastedAlloca("enable-dse-casted-alloca",
+  cl::init(true), cl::desc("Enable removing addr space casted alloca"));
 
 //===----------------------------------------------------------------------===//
 // Helper functions
@@ -989,6 +992,8 @@ static bool eliminateNoopStore(Instruction *Inst, BasicBlock::iterator &BBI,
   }
 
   // Remove a store to stack whose life ends immediately
+  if (!EnableRemoveAddrSpaceCastedAlloca)
+    return false;
   if (auto *ASC = dyn_cast<AddrSpaceCastInst>(SI->getPointerOperand())) {
     auto *A = dyn_cast<AllocaInst>(ASC->stripPointerCasts());
     if (!A)
@@ -1067,20 +1072,16 @@ static bool eliminateDeadStores(BasicBlock &BB, AliasAnalysis *AA,
     if (!hasMemoryWrite(Inst, *TLI))
       continue;
 
+#ifndef NDEBUG
     if (auto *ST = dyn_cast<StoreInst>(Inst)) {
-    if (auto *ASC = dyn_cast<AddrSpaceCastInst>(ST->getPointerOperand())) {
-      DEBUG(dbgs() << "[eliminateDeadStores] "
+      if (auto *ASC = dyn_cast<AddrSpaceCastInst>(ST->getPointerOperand())) {
+        DEBUG(dbgs() << "[eliminateDeadStores] "
           << "store: " << *ST << '\n'
           << "addrcast: " << *ASC << '\n'
           << "orig: " << *ASC->getPointerOperand() << '\n');
-      /*
-      DEBUG(dbgs() << "users:\n");
-      for (auto U:ASC->users()) {
-        DEBUG(dbgs() << *U << '\n');
       }
-      */
     }
-    }
+#endif
 
     // eliminateNoopStore will update in iterator, if necessary.
     if (eliminateNoopStore(Inst, BBI, AA, MD, DL, TLI, IOL, &InstrOrdering)) {
