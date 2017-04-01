@@ -18,6 +18,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Linker/Linker.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -26,6 +27,10 @@
 #define DEBUG_TYPE "amdclpvectorexpansion"
 
 using namespace llvm;
+
+static cl::opt<bool> ExpandHalfFunc("amdgpu-clp-expand-half-func",
+    cl::desc("Enable expanding functions with half types in clp"),
+    cl::init(false));
 
 // Copied from amd_ocl_builtindef.h
 // descriptor for a parameter type or return type
@@ -443,6 +448,7 @@ class AMDGPUclpVectorExpansion : public ModulePass {
   typedef StringMap<const a_builtinfunc *> an_expansionInfo_t;
   an_expansionInfo_t ExpansionInfo;
   std::unique_ptr<Module> TempModule;
+  AMDGPUAS AS;
 
   char getAddrSpaceCode(StringRef);
   std::string getNextFunctionName(StringRef, an_typedes_t, int, char);
@@ -550,12 +556,12 @@ char AMDGPUclpVectorExpansion::getAddrSpaceCode(StringRef CurFuncName) {
     size_t SeparatorPos = CurFuncName.rfind("AS");
     assert(SeparatorPos != StringRef::npos);
     AddrSpaceCode = CurFuncName[SeparatorPos + 2];
-    assert('0' <= AddrSpaceCode && AddrSpaceCode <= '4');
+    assert('0' <= AddrSpaceCode && AddrSpaceCode <= '5');
   }
   // make sure it's a pointer to private address space
   else {
     assert(CurFuncName.rfind('P') != StringRef::npos);
-    AddrSpaceCode = (AMDGPUAS::PRIVATE_ADDRESS + '0');
+    AddrSpaceCode = '0';
   }
   return AddrSpaceCode;
 } // AMDGPUclpVectorExpansion::getAddrSpaceCode
@@ -613,6 +619,14 @@ std::string AMDGPUclpVectorExpansion::getNextFunctionName(StringRef CurFuncName,
   return Oss.str();
 } // AMDGPUclpVectorExpansion::getNextFunctionName
 
+static bool hasHalfParams(Function &F) {
+  for (auto &I:F.args()) {
+    if (I.getType()->getScalarType()->isHalfTy())
+      return true;
+  }
+  return false;
+}
+
 /// process a function to collect information for funcuseInfo
 ///
 void AMDGPUclpVectorExpansion::checkAndAddToExpansion(Function *TheFunc) {
@@ -627,6 +641,10 @@ void AMDGPUclpVectorExpansion::checkAndAddToExpansion(Function *TheFunc) {
   if (!FuncName.substr(UnmangledLen)
            .startswith(OPENCL_VARG_BUILTIN_SPIR_VECTYPE))
     return;
+
+  if (!ExpandHalfFunc && hasHalfParams(*TheFunc)) {
+    return;
+  }
 
   StringRef Suffix =
       FuncName.substr(UnmangledLen + OPENCL_VARG_BUILTIN_SPIR_VECTYPE_LEN);
@@ -1028,6 +1046,7 @@ AMDGPUclpVectorExpansion::AMDGPUclpVectorExpansion()
 /// process an LLVM module to perform expand vector builtin calls
 ///
 bool AMDGPUclpVectorExpansion::runOnModule(Module &TheModule) {
+  AS = AMDGPU::getAMDGPUAS(TheModule);
   TempModule.reset(
       new Module("__opencllib_vectorexpansion", TheModule.getContext()));
   TempModule->setDataLayout(TheModule.getDataLayout());

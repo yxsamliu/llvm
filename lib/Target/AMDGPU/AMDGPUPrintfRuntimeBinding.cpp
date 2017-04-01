@@ -36,6 +36,8 @@ using namespace llvm;
 
 namespace {
 class LLVM_LIBRARY_VISIBILITY AMDGPUPrintfRuntimeBinding : public ModulePass {
+  AMDGPUAS AMDGPUASI;
+
 public:
   static char ID;
   explicit AMDGPUPrintfRuntimeBinding();
@@ -177,7 +179,7 @@ bool AMDGPUPrintfRuntimeBinding::shouldPrintAsStr(char Specifier,
   if (!PT) {
     return false;
   }
-  if (PT->getAddressSpace() != AMDGPUAS::CONSTANT_ADDRESS) {
+  if (PT->getAddressSpace() != AMDGPUASI.CONSTANT_ADDRESS) {
     return false;
   }
   Type* ElemType = PT->getContainedType(0);
@@ -378,8 +380,8 @@ bool AMDGPUPrintfRuntimeBinding::lowerPrintfForGpu(Module &M) {
       Builder.SetInsertPoint(CI);
       Builder.SetCurrentDebugLocation(CI->getDebugLoc());
 
-      AttributeSet Attr = AttributeSet::get(Ctx, AttributeSet::FunctionIndex,
-                                            Attribute::NoUnwind);
+      AttributeList Attr = AttributeList::get(Ctx, AttributeList::FunctionIndex,
+                                              Attribute::NoUnwind);
 
       Type *SizetTy = Type::getInt32Ty(Ctx);
 
@@ -679,6 +681,7 @@ StringRef AMDGPUPrintfRuntimeBinding::getPassName() const {
 }
 
 bool AMDGPUPrintfRuntimeBinding::doInitialization(Module &M) {
+  AMDGPUASI = AMDGPU::getAMDGPUAS(M);
   return false;
 }
 

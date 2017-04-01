@@ -105,11 +105,12 @@ public:
   bool isSourceOfDivergence(const Value *V) const;
 
   unsigned getFlatAddressSpace() const {
-    return AMDGPUAS::FLAT_ADDRESS;
-  }
-
-  unsigned getPrivateAddressSpace() const {
-    return AMDGPUAS::PRIVATE_ADDRESS;
+    // Don't bother running InferAddressSpaces pass on graphics shaders which
+    // don't use flat addressing.
+    if (IsGraphicsShader)
+      return -1;
+    return ST->hasFlatAddressSpace() ?
+      ST->getAMDGPUAS().FLAT_ADDRESS : ST->getAMDGPUAS().UNKNOWN_ADDRESS_SPACE;
   }
 
   unsigned getVectorSplitCost() { return 0; }
