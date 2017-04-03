@@ -96,9 +96,9 @@ defm V_INTERP_MOV_F32 : VINTRP_m <
 //===----------------------------------------------------------------------===//
 
 def ATOMIC_FENCE : InstSI<
-  (outs), (ins i32imm:$ordering, i32imm:$scope),
+  (outs), (ins i64imm:$ordering, i64imm:$scope),
   "ATOMIC_FENCE $ordering, $scope",
-  [(atomic_fence (i32 imm:$ordering), (i32 imm:$scope))]> {
+  [(atomic_fence (i64 imm:$ordering), (i64 imm:$scope))]> {
   let hasSideEffects = 1;
   let isCodeGenOnly = 1;
   let isPseudo = 1;
@@ -849,11 +849,6 @@ def : Pat <
 def : Pat <
   (f16 fpimm:$imm),
   (S_MOV_B32 (i32 (bitcast_fpimm_to_i32 $imm)))
->;
-
-def : Pat <
- (i32 frameindex:$fi),
- (V_MOV_B32_e32 (i32 (frameindex_to_targetframeindex $fi)))
 >;
 
 def : Pat <

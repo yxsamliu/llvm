@@ -190,7 +190,8 @@ bool EraseNonkernels::runOnModule(Module &M)
                         I->getName().find("get_group_segment_size") != StringRef::npos || 
                         I->getName().find("get_static_group_segment_size") != StringRef::npos || 
                         I->getName().find("get_group_segment_base_pointer") != StringRef::npos || 
-                        I->getName().find("get_dynamic_group_segment_base_pointer") != StringRef::npos ) {
+                        I->getName().find("get_dynamic_group_segment_base_pointer") != StringRef::npos ||
+                        I->getName().find("experimental8parallel") != StringRef::npos) {
 			I++;
 			continue;
 		}

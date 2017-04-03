@@ -330,6 +330,9 @@ static bool getConstantValue(SDValue N, uint32_t &Out) {
 }
 
 void AMDGPUDAGToDAGISel::Select(SDNode *N) {
+  DEBUG_WITH_TYPE("isel", dbgs() << "[AMDGPUDAGToDAGISel::Select] ";
+    N->dump();
+    dbgs() << '\n');
   unsigned int Opc = N->getOpcode();
   if (N->isMachineOpcode()) {
     N->setNodeId(-1);
@@ -1072,7 +1075,7 @@ bool AMDGPUDAGToDAGISel::SelectMUBUFAddr64(SDValue Addr, SDValue &SRsrc,
 
 SDValue AMDGPUDAGToDAGISel::foldFrameIndex(SDValue N) const {
   if (auto FI = dyn_cast<FrameIndexSDNode>(N))
-    return CurDAG->getTargetFrameIndex(FI->getIndex(), FI->getValueType(0));
+    return CurDAG->getTargetFrameIndex(FI->getIndex(), MVT::i32);
   return N;
 }
 
@@ -1103,6 +1106,7 @@ bool AMDGPUDAGToDAGISel::SelectMUBUFScratch(SDValue Addr, SDValue &Rsrc,
 
   // (node)
   VAddr = foldFrameIndex(Addr);
+
   ImmOffset = CurDAG->getTargetConstant(0, DL, MVT::i16);
   return true;
 }
