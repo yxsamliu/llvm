@@ -283,9 +283,6 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::ADDRSPACECAST, MVT::i32, Custom);
   setOperationAction(ISD::ADDRSPACECAST, MVT::i64, Custom);
 
-  // Lower 64 bit frame index to 32 bit target frame index.
-  setOperationAction(ISD::FrameIndex, MVT::i64, Custom);
-
   setOperationAction(ISD::BSWAP, MVT::i32, Legal);
   setOperationAction(ISD::BITREVERSE, MVT::i32, Legal);
 
@@ -2103,7 +2100,6 @@ SDValue SITargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::INTRINSIC_W_CHAIN: return LowerINTRINSIC_W_CHAIN(Op, DAG);
   case ISD::INTRINSIC_VOID: return LowerINTRINSIC_VOID(Op, DAG);
   case ISD::ADDRSPACECAST: return lowerADDRSPACECAST(Op, DAG);
-  case ISD::FrameIndex: return lowerFrameIndex(Op, DAG);
   case ISD::INSERT_VECTOR_ELT:
     return lowerINSERT_VECTOR_ELT(Op, DAG);
   case ISD::EXTRACT_VECTOR_ELT:
@@ -2394,33 +2390,6 @@ SDValue SITargetLowering::getSegmentAperture(unsigned AS,
                      MinAlign(64, StructOffset),
                      MachineMemOperand::MODereferenceable |
                          MachineMemOperand::MOInvariant);
-}
-
-SDValue SITargetLowering::lowerFrameIndex(SDValue Op,
-                                          SelectionDAG &DAG) const {
-  SDLoc SL(Op);
-  auto *FI = cast<FrameIndexSDNode>(Op);
-
-  // FIXME: Really support non-0 null pointers.
-  SDValue SegmentNullPtr = DAG.getConstant(-1, SL, MVT::i32);
-  SDValue FlatNullPtr = DAG.getConstant(0, SL, MVT::i64);
-
-  MachineFunction &MF = DAG.getMachineFunction();
-  SIMachineFunctionInfo &MFI = *MF.getInfo<SIMachineFunctionInfo>();
-
-  // private -> flat
-  MFI.HasFlatLocalCasts = true;
-  auto Src = DAG.getTargetFrameIndex(FI->getIndex(), MVT::i32);
-  SDValue NonNull
-    = DAG.getSetCC(SL, MVT::i1, Src, SegmentNullPtr, ISD::SETNE);
-
-  SDValue Aperture = getSegmentAperture(AMDGPUASI.PRIVATE_ADDRESS, DAG);
-  SDValue CvtPtr
-    = DAG.getNode(ISD::BUILD_VECTOR, SL, MVT::v2i32, Src, Aperture);
-
-  return DAG.getNode(ISD::SELECT, SL, MVT::i64, NonNull,
-                     DAG.getNode(ISD::BITCAST, SL, MVT::i64, CvtPtr),
-                     FlatNullPtr);
 }
 
 SDValue SITargetLowering::lowerADDRSPACECAST(SDValue Op,

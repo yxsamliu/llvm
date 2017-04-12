@@ -896,7 +896,6 @@ SDValue SelectionDAGBuilder::getControlRoot() {
 }
 
 void SelectionDAGBuilder::visit(const Instruction &I) {
-  DEBUG(dbgs() << "SelectionDAGBuilder: " << I << '\n');
   // Set up outgoing PHI node register values before emitting the terminator.
   if (isa<TerminatorInst>(&I)) {
     HandlePHINodesInSuccessorBlocks(I.getParent());

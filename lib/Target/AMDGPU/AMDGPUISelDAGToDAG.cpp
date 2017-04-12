@@ -330,9 +330,6 @@ static bool getConstantValue(SDValue N, uint32_t &Out) {
 }
 
 void AMDGPUDAGToDAGISel::Select(SDNode *N) {
-  DEBUG_WITH_TYPE("isel", dbgs() << "[AMDGPUDAGToDAGISel::Select] ";
-    N->dump();
-    dbgs() << '\n');
   unsigned int Opc = N->getOpcode();
   if (N->isMachineOpcode()) {
     N->setNodeId(-1);
