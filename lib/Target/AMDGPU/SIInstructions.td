@@ -96,9 +96,9 @@ defm V_INTERP_MOV_F32 : VINTRP_m <
 //===----------------------------------------------------------------------===//
 
 def ATOMIC_FENCE : InstSI<
-  (outs), (ins i64imm:$ordering, i64imm:$scope),
+  (outs), (ins i32imm:$ordering, i32imm:$scope),
   "ATOMIC_FENCE $ordering, $scope",
-  [(atomic_fence (i64 imm:$ordering), (i64 imm:$scope))]> {
+  [(atomic_fence (i32 imm:$ordering), (i32 imm:$scope))]> {
   let hasSideEffects = 1;
   let isCodeGenOnly = 1;
   let isPseudo = 1;
