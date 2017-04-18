@@ -236,6 +236,10 @@ public:
     return getPointerTy(DL, DL.getAllocaAddrSpace());
   }
 
+  /// Return the type for operands of fence.
+  virtual MVT getFenceOperandTy(const DataLayout &DL) const {
+    return getPointerTy(DL);
+  }
   /// EVT is not used in-tree, but is used by out-of-tree target.
   /// A documentation for this function would be nice...
   virtual MVT getScalarShiftAmountTy(const DataLayout &, EVT) const;
