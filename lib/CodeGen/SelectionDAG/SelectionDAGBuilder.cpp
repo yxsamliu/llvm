@@ -896,7 +896,6 @@ SDValue SelectionDAGBuilder::getControlRoot() {
 }
 
 void SelectionDAGBuilder::visit(const Instruction &I) {
-  DEBUG(dbgs() << "SelectionDAGBuilder: " << I << '\n');
   // Set up outgoing PHI node register values before emitting the terminator.
   if (isa<TerminatorInst>(&I)) {
     HandlePHINodesInSuccessorBlocks(I.getParent());
@@ -1152,7 +1151,7 @@ SDValue SelectionDAGBuilder::getValueImpl(const Value *V) {
       FuncInfo.StaticAllocaMap.find(AI);
     if (SI != FuncInfo.StaticAllocaMap.end())
       return DAG.getFrameIndex(SI->second,
-                               TLI.getPointerTy(DAG.getDataLayout()));
+                               TLI.getFrameIndexTy(DAG.getDataLayout()));
   }
 
   // If this is an instruction which fast-isel has deferred, select it now.
@@ -5614,7 +5613,7 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
       SDValue Ops[2];
       Ops[0] = getRoot();
       Ops[1] =
-          DAG.getFrameIndex(FI, TLI.getPointerTy(DAG.getDataLayout()), true);
+          DAG.getFrameIndex(FI, TLI.getFrameIndexTy(DAG.getDataLayout()), true);
       unsigned Opcode = (IsStart ? ISD::LIFETIME_START : ISD::LIFETIME_END);
 
       Res = DAG.getNode(Opcode, sdl, MVT::Other, Ops);
@@ -6628,7 +6627,7 @@ static SDValue getAddressForMemoryInput(SDValue Chain, const SDLoc &Location,
   unsigned Align = DL.getPrefTypeAlignment(Ty);
   MachineFunction &MF = DAG.getMachineFunction();
   int SSFI = MF.getFrameInfo().CreateStackObject(TySize, Align, false);
-  SDValue StackSlot = DAG.getFrameIndex(SSFI, TLI.getPointerTy(DL));
+  SDValue StackSlot = DAG.getFrameIndex(SSFI, TLI.getFrameIndexTy(DL));
   Chain = DAG.getStore(Chain, Location, OpInfo.CallOperand, StackSlot,
                        MachinePointerInfo::getFixedStack(MF, SSFI));
   OpInfo.CallOperand = StackSlot;
@@ -7391,7 +7390,7 @@ static void addStackMapLiveVars(ImmutableCallSite CS, unsigned StartIdx,
     } else if (FrameIndexSDNode *FI = dyn_cast<FrameIndexSDNode>(OpVal)) {
       const TargetLowering &TLI = Builder.DAG.getTargetLoweringInfo();
       Ops.push_back(Builder.DAG.getTargetFrameIndex(
-          FI->getIndex(), TLI.getPointerTy(Builder.DAG.getDataLayout())));
+          FI->getIndex(), TLI.getFrameIndexTy(Builder.DAG.getDataLayout())));
     } else
       Ops.push_back(OpVal);
   }
@@ -7659,7 +7658,7 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
     DemoteStackIdx = MF.getFrameInfo().CreateStackObject(TySize, Align, false);
     Type *StackSlotPtrType = PointerType::getUnqual(CLI.RetTy);
 
-    DemoteStackSlot = CLI.DAG.getFrameIndex(DemoteStackIdx, getPointerTy(DL));
+    DemoteStackSlot = CLI.DAG.getFrameIndex(DemoteStackIdx, getFrameIndexTy(DL));
     ArgListEntry Entry;
     Entry.Node = DemoteStackSlot;
     Entry.Ty = StackSlotPtrType;
