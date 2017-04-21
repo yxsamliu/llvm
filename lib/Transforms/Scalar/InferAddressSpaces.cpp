@@ -301,7 +301,9 @@ InferAddressSpaces::collectFlatAddressExpressions(Function &F) const {
   // stores for now because we aim at generating faster loads and stores.
   for (Instruction &I : instructions(F)) {
     DEBUG(dbgs() << "check: " << I << '\n');
-    if (auto *LI = dyn_cast<LoadInst>(&I))
+    if (auto *ASCI = dyn_cast<AddrSpaceCastInst>(&I))
+      PushPtrOperand(ASCI->getPointerOperand());
+    else if (auto *LI = dyn_cast<LoadInst>(&I))
       PushPtrOperand(LI->getPointerOperand());
     else if (auto *SI = dyn_cast<StoreInst>(&I))
       PushPtrOperand(SI->getPointerOperand());
@@ -780,6 +782,37 @@ static Value::use_iterator skipToNextUser(Value::use_iterator I,
   return I;
 }
 
+/// C may have non-instruction users, and
+/// allNonInstructionUsersCanBeMadeInstructions has returned true. Convert the
+/// non-instruction users to instructions.
+static void makeAllConstantUsesInstructions(Constant *C) {
+  SmallVector<ConstantExpr*,4> Users;
+  for (auto *U : C->users()) {
+    if (isa<ConstantExpr>(U))
+      Users.push_back(cast<ConstantExpr>(U));
+    else
+      // We should never get here; allNonInstructionUsersCanBeMadeInstructions
+      // should not have returned true for C.
+      assert(
+             isa<Instruction>(U) &&
+             "Can't transform non-constantexpr non-instruction to instruction!");
+  }
+
+  SmallVector<Value*,4> UUsers;
+  for (auto *U : Users) {
+    UUsers.clear();
+    for (auto *UU : U->users())
+      UUsers.push_back(UU);
+      for (auto *UU : UUsers) {
+        Instruction *UI = cast<Instruction>(UU);
+        Instruction *NewU = U->getAsInstruction();
+        NewU->insertBefore(UI);
+        UI->replaceUsesOfWith(U, NewU);
+      }
+    U->dropAllReferences();
+  }
+}
+
 bool InferAddressSpaces::rewriteWithNewAddressSpaces(
   const std::vector<Value *> &Postorder,
   const ValueToAddrSpaceMapTy &InferredAddrSpace, Function *F) const {
@@ -888,6 +921,10 @@ bool InferAddressSpaces::rewriteWithNewAddressSpaces(
           U.set(ConstantExpr::getAddrSpaceCast(cast<Constant>(NewV),
                                                V->getType()));
         }
+      } else {
+        // Flatten Constant to Instructions to exploit more optimization
+        // opportunities
+        makeAllConstantUsesInstructions(dyn_cast<Constant>(CurUser));
       }
     }
 
