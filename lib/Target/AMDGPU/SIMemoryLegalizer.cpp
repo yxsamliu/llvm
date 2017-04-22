@@ -243,7 +243,8 @@ bool SIMemoryLegalizer::expandAtomicFence(MachineBasicBlock::iterator &MI) {
   switch (SynchScope) {
   case AMDGPUSynchronizationScope::System:
   case AMDGPUSynchronizationScope::Agent: {
-    if (Ordering == AtomicOrdering::Release ||
+    if (Ordering == AtomicOrdering::Acquire ||
+        Ordering == AtomicOrdering::Release ||
         Ordering == AtomicOrdering::AcquireRelease ||
         Ordering == AtomicOrdering::SequentiallyConsistent)
       Changed |= insertWaitcntVmcnt0(MI);
@@ -362,8 +363,6 @@ bool SIMemoryLegalizer::expandAtomicCmpxchg(MachineBasicBlock::iterator &MI) {
   switch (SynchScope) {
   case AMDGPUSynchronizationScope::System:
   case AMDGPUSynchronizationScope::Agent: {
-    Changed |= setGLC(MI);
-
     if (SuccessOrdering == AtomicOrdering::Release ||
         SuccessOrdering == AtomicOrdering::AcquireRelease ||
         SuccessOrdering == AtomicOrdering::SequentiallyConsistent ||
@@ -410,8 +409,6 @@ bool SIMemoryLegalizer::expandAtomicRmw(MachineBasicBlock::iterator &MI) {
   switch (SynchScope) {
   case AMDGPUSynchronizationScope::System:
   case AMDGPUSynchronizationScope::Agent: {
-    Changed |= setGLC(MI);
-
     if (Ordering == AtomicOrdering::Release ||
         Ordering == AtomicOrdering::AcquireRelease ||
         Ordering == AtomicOrdering::SequentiallyConsistent)
