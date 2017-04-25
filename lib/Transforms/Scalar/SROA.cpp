@@ -670,13 +670,6 @@ private:
     return Base::visitBitCastInst(BC);
   }
 
-  void visitAddrSpaceCastInst(AddrSpaceCastInst &ASC) {
-    if (ASC.use_empty())
-      return markAsDead(ASC);
-
-    return Base::visitAddrSpaceCastInst(ASC);
-  }
-
   void visitGetElementPtrInst(GetElementPtrInst &GEPI) {
     if (GEPI.use_empty())
       return markAsDead(GEPI);
@@ -914,7 +907,7 @@ private:
         if (!GEP->hasAllZeroIndices())
           return GEP;
       } else if (!isa<BitCastInst>(I) && !isa<PHINode>(I) &&
-                 !isa<SelectInst>(I) && !isa<AddrSpaceCastInst>(I)) {
+                 !isa<SelectInst>(I)) {
         return I;
       }
 
@@ -1553,8 +1546,7 @@ static Value *getAdjustedPtr(IRBuilderTy &IRB, const DataLayout &DL, Value *Ptr,
     }
 
     // Peel off a layer of the pointer and update the offset appropriately.
-    unsigned Opc = Operator::getOpcode(Ptr);
-    if (Opc == Instruction::BitCast || Opc == Instruction::AddrSpaceCast) {
+    if (Operator::getOpcode(Ptr) == Instruction::BitCast) {
       Ptr = cast<Operator>(Ptr)->getOperand(0);
     } else if (GlobalAlias *GA = dyn_cast<GlobalAlias>(Ptr)) {
       if (GA->isInterposable())
@@ -1583,10 +1575,8 @@ static Value *getAdjustedPtr(IRBuilderTy &IRB, const DataLayout &DL, Value *Ptr,
   Ptr = OffsetPtr;
 
   // On the off chance we were targeting i8*, guard the bitcast here.
-  if (Ptr->getType() != PointerTy) {
-    Ptr = IRB.CreatePointerBitCastOrAddrSpaceCast(Ptr, PointerTy,
-                                                  NamePrefix + "sroa_cast");
-  }
+  if (Ptr->getType() != PointerTy)
+    Ptr = IRB.CreateBitCast(Ptr, PointerTy, NamePrefix + "sroa_cast");
 
   return Ptr;
 }
@@ -3166,11 +3156,6 @@ private:
 
   bool visitBitCastInst(BitCastInst &BC) {
     enqueueUsers(BC);
-    return false;
-  }
-
-  bool visitAddrSpaceCastInst(AddrSpaceCastInst &ASC) {
-    enqueueUsers(ASC);
     return false;
   }
 

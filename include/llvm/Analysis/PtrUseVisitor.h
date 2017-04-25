@@ -242,10 +242,6 @@ protected:
     enqueueUsers(BC);
   }
 
-  void visitAddrSpaceCastInst(AddrSpaceCastInst &ASC) {
-    enqueueUsers(ASC);
-  }
-
   void visitPtrToIntInst(PtrToIntInst &I) {
     PI.setEscaped(&I);
   }
