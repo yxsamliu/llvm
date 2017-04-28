@@ -1401,6 +1401,12 @@ static void patchAndReplaceAllUsesWith(Instruction *I, Value *Repl) {
 /// Attempt to eliminate a load, first by eliminating it
 /// locally, and then attempting non-local elimination if that fails.
 bool GVN::processLoad(LoadInst *L) {
+  static const char *dbg = getenv("DBG_HCC");
+  auto Op = L->getPointerOperand();
+  if (dbg && Op->hasName() && Op->getName() == "p_.i.i.i.i") {
+    llvm::errs() << "GVN::processLoad " << *L << '\n';
+    llvm::errs() << "BB:\n" << *(L->getParent()) << '\n';
+  }
   if (!MD)
     return false;
 
@@ -1678,6 +1684,10 @@ bool GVN::propagateEquality(Value *LHS, Value *RHS, const BasicBlockEdge &Root,
 /// When calculating availability, handle an instruction
 /// by inserting it into the appropriate sets
 bool GVN::processInstruction(Instruction *I) {
+  static const char *dbg = getenv("DBG_HCC");
+  if (dbg && I->hasName() && I->getName() == "arrayidx.i.i8.i") {
+    llvm::errs() << "GVN::processInstruction" << *I << '\n';
+  }
   // Ignore dbg info intrinsics.
   if (isa<DbgInfoIntrinsic>(I))
     return false;
