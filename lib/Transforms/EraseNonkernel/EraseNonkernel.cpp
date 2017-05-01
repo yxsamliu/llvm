@@ -121,13 +121,17 @@ static bool IsCalledByKernel(Function *F, FunctionMap &FuncCalledByKernel) {
   auto Loc = FuncCalledByKernel.find(F);
   if (Loc != FuncCalledByKernel.end())
     return FuncCalledByKernel[F];
+  DEBUG(dbgs() << "[CHECK] "; F->printAsOperand(dbgs()); dbgs() << '\n');
   for (auto I:F->users()) {
+    DEBUG(dbgs() << "  user: " << *I << '\n');
     CallSite CS(I);
     if (CS && IsCalledByKernel(CS.getCaller(), FuncCalledByKernel)) {
+      DEBUG(F->printAsOperand(dbgs()); dbgs() << "is called by kernel\n");
       FuncCalledByKernel[F] = true;
       return true;
     }
   }
+  DEBUG(F->printAsOperand(dbgs()); dbgs() << " is not called by kernel\n");
   FuncCalledByKernel[F] = false;
   return false;
 }
@@ -140,6 +144,9 @@ bool EraseNonkernels::runOnModule(Module &M)
     for (func_iterator F = M.begin(), Fend = M.end();
             F != Fend; ++F) {
         if (IsCalledByKernel(&*F, FuncCalledByKernel)) continue;
+        DEBUG(dbgs() << "[REMOVE FUNC BODY] ";
+              F->printAsOperand(dbgs());
+              dbgs() << '\n');
         F->deleteBody();
     }
 
@@ -173,7 +180,7 @@ bool EraseNonkernels::runOnModule(Module &M)
 		}
 
 		// remove all other functions
-		DEBUG(llvm::dbgs() << "[REMOVE FUNC]: " << I->getName() << "\n");
+		DEBUG(dbgs() << "[REMOVE FUNC DECL]: "; I->printAsOperand(dbgs()); dbgs() << "\n");
 		I->removeFromParent();
 		I = global_funcs.begin();
 	}
@@ -183,7 +190,7 @@ bool EraseNonkernels::runOnModule(Module &M)
 	for (Module::alias_iterator I = global_aliases.begin(), E = global_aliases.end(); I != E; ) {
 		I->removeDeadConstantUsers();
 		if (I->getNumUses() == 0) {
-			DEBUG(llvm::dbgs() << "[REMOVE ALIAS]: " << I->getName() << "\n");
+			DEBUG(dbgs() << "[REMOVE ALIAS]: "; I->printAsOperand(dbgs()); dbgs() << "\n");
 			I->eraseFromParent();
 			I = global_aliases.begin();
 		} else {
