@@ -3589,7 +3589,9 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
       auto *PartPtrTy = PartTy->getPointerTo(LI->getPointerAddressSpace());
       LoadInst *PLoad = IRB.CreateAlignedLoad(
           getAdjustedPtr(IRB, DL, BasePtr,
-                         APInt(DL.getPointerSizeInBits(), PartOffset),
+                         APInt(DL.getPointerSizeInBits(
+                               LI->getPointerAddressSpace()),
+                               PartOffset),
                          PartPtrTy, BasePtr->getName() + "."),
           getAdjustedAlignment(LI, PartOffset, DL), /*IsVolatile*/ false,
           LI->getName());
@@ -3643,7 +3645,9 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
 
         StoreInst *PStore = IRB.CreateAlignedStore(
             PLoad, getAdjustedPtr(IRB, DL, StoreBasePtr,
-                                  APInt(DL.getPointerSizeInBits(), PartOffset),
+                                  APInt(DL.getPointerSizeInBits(
+                                        SI->getPointerAddressSpace()),
+                                        PartOffset),
                                   PartPtrTy, StoreBasePtr->getName() + "."),
             getAdjustedAlignment(SI, PartOffset, DL), /*IsVolatile*/ false);
         PStore->copyMetadata(*LI, LLVMContext::MD_mem_parallel_loop_access);
@@ -3713,7 +3717,8 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
     int Idx = 0, Size = Offsets.Splits.size();
     for (;;) {
       auto *PartTy = Type::getIntNTy(Ty->getContext(), PartSize * 8);
-      auto *PartPtrTy = PartTy->getPointerTo(SI->getPointerAddressSpace());
+      auto AS = SI->getPointerAddressSpace();
+      auto *PartPtrTy = PartTy->getPointerTo(AS);
 
       // Either lookup a split load or create one.
       LoadInst *PLoad;
@@ -3723,7 +3728,7 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
         IRB.SetInsertPoint(LI);
         PLoad = IRB.CreateAlignedLoad(
             getAdjustedPtr(IRB, DL, LoadBasePtr,
-                           APInt(DL.getPointerSizeInBits(), PartOffset),
+                           APInt(DL.getPointerSizeInBits(AS), PartOffset),
                            PartPtrTy, LoadBasePtr->getName() + "."),
             getAdjustedAlignment(LI, PartOffset, DL), /*IsVolatile*/ false,
             LI->getName());
@@ -3733,7 +3738,7 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
       IRB.SetInsertPoint(SI);
       StoreInst *PStore = IRB.CreateAlignedStore(
           PLoad, getAdjustedPtr(IRB, DL, StoreBasePtr,
-                                APInt(DL.getPointerSizeInBits(), PartOffset),
+                                APInt(DL.getPointerSizeInBits(AS), PartOffset),
                                 PartPtrTy, StoreBasePtr->getName() + "."),
           getAdjustedAlignment(SI, PartOffset, DL), /*IsVolatile*/ false);
 
