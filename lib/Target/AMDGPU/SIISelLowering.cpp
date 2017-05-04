@@ -2528,7 +2528,7 @@ SDValue SITargetLowering::getSegmentAperture(unsigned AS, const SDLoc &DL,
   SIMachineFunctionInfo *Info = MF.getInfo<SIMachineFunctionInfo>();
   unsigned UserSGPR = Info->getQueuePtrUserSGPR();
   if (UserSGPR == AMDGPU::NoRegister) {
-    return DAG.getConstant(0, SL, MVT::i32);
+    return DAG.getConstant(0, DL, MVT::i32);
   }
 
   SDValue QueuePtr = CreateLiveInRegister(
