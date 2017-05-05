@@ -283,7 +283,8 @@ StringRef AMDGPUTargetMachine::getFeatureString(const Function &F) const {
 
 void AMDGPUTargetMachine::addPreLinkPasses(PassManagerBase & PM) {
   PM.add(llvm::createAMDGPUConvertAtomicLibCallsPass());
-  PM.add(llvm::createAMDGPUOCL12AdapterPass());
+  if (getTargetTriple().getEnvironment() != Triple::HCC)
+    PM.add(llvm::createAMDGPUOCL12AdapterPass());
   PM.add(llvm::createAMDGPUPrintfRuntimeBinding());
   // ToDo: Do we still need it?
   //PM.add(llvm::createAMDGPUclpVectorExpansionPass());
