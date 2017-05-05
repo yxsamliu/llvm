@@ -576,6 +576,7 @@ bool InferAddressSpaces::runOnFunction(Function &F) {
   if (skipFunction(F))
     return false;
 
+  DEBUG(dbgs() << "InferAddressSpace on " << F.getName() << '\n');
   const TargetTransformInfo &TTI =
       getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F);
   FlatAddrSpace = TTI.getFlatAddressSpace();
@@ -845,7 +846,7 @@ bool InferAddressSpaces::rewriteWithNewAddressSpaces(
     assert(WVH && "value was unexpectedly deleted");
     Value *V = WVH;
     Value *NewV = ValueWithNewAddrSpace.lookup(V);
-    if (NewV == nullptr)
+    if (NewV == nullptr || V == NewV)
       continue;
 
     DEBUG(dbgs() << "Replacing the uses of " << *V
