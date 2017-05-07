@@ -25,6 +25,7 @@
 
 #include "llvm/Transforms/Scalar/SROA.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AssumptionCache.h"
@@ -1518,10 +1519,10 @@ static Value *getAdjustedPtr(IRBuilderTy &IRB, const DataLayout &DL, Value *Ptr,
   do {
     // First fold any existing GEPs into the offset.
     while (GEPOperator *GEP = dyn_cast<GEPOperator>(Ptr)) {
-      APInt GEPOffset(Offset.getBitWidth(), 0);
+      APInt GEPOffset(DL.getPointerTypeSizeInBits(Ptr->getType()), 0);
       if (!GEP->accumulateConstantOffset(DL, GEPOffset))
         break;
-      Offset += GEPOffset;
+      Offset += GEPOffset.zextOrTrunc(Offset.getBitWidth());
       Ptr = GEP->getPointerOperand();
       if (!Visited.insert(Ptr).second)
         break;
@@ -2196,8 +2197,8 @@ class llvm::sroa::AllocaSliceRewriter
   Instruction *OldPtr;
 
   // Track post-rewrite users which are PHI nodes and Selects.
-  SmallPtrSetImpl<PHINode *> &PHIUsers;
-  SmallPtrSetImpl<SelectInst *> &SelectUsers;
+  SmallSetVector<PHINode *, 8> &PHIUsers;
+  SmallSetVector<SelectInst *, 8> &SelectUsers;
 
   // Utility IR builder, whose name prefix is setup for each visited use, and
   // the insertion point is set to point to the user.
@@ -2209,8 +2210,8 @@ public:
                       uint64_t NewAllocaBeginOffset,
                       uint64_t NewAllocaEndOffset, bool IsIntegerPromotable,
                       VectorType *PromotableVecTy,
-                      SmallPtrSetImpl<PHINode *> &PHIUsers,
-                      SmallPtrSetImpl<SelectInst *> &SelectUsers)
+                      SmallSetVector<PHINode *, 8> &PHIUsers,
+                      SmallSetVector<SelectInst *, 8> &SelectUsers)
       : DL(DL), AS(AS), Pass(Pass), OldAI(OldAI), NewAI(NewAI),
         NewAllocaBeginOffset(NewAllocaBeginOffset),
         NewAllocaEndOffset(NewAllocaEndOffset),
@@ -3588,7 +3589,9 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
       auto *PartPtrTy = PartTy->getPointerTo(LI->getPointerAddressSpace());
       LoadInst *PLoad = IRB.CreateAlignedLoad(
           getAdjustedPtr(IRB, DL, BasePtr,
-                         APInt(DL.getPointerSizeInBits(), PartOffset),
+                         APInt(DL.getPointerSizeInBits(
+                               LI->getPointerAddressSpace()),
+                               PartOffset),
                          PartPtrTy, BasePtr->getName() + "."),
           getAdjustedAlignment(LI, PartOffset, DL), /*IsVolatile*/ false,
           LI->getName());
@@ -3642,7 +3645,9 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
 
         StoreInst *PStore = IRB.CreateAlignedStore(
             PLoad, getAdjustedPtr(IRB, DL, StoreBasePtr,
-                                  APInt(DL.getPointerSizeInBits(), PartOffset),
+                                  APInt(DL.getPointerSizeInBits(
+                                        SI->getPointerAddressSpace()),
+                                        PartOffset),
                                   PartPtrTy, StoreBasePtr->getName() + "."),
             getAdjustedAlignment(SI, PartOffset, DL), /*IsVolatile*/ false);
         PStore->copyMetadata(*LI, LLVMContext::MD_mem_parallel_loop_access);
@@ -3712,7 +3717,8 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
     int Idx = 0, Size = Offsets.Splits.size();
     for (;;) {
       auto *PartTy = Type::getIntNTy(Ty->getContext(), PartSize * 8);
-      auto *PartPtrTy = PartTy->getPointerTo(SI->getPointerAddressSpace());
+      auto AS = SI->getPointerAddressSpace();
+      auto *PartPtrTy = PartTy->getPointerTo(AS);
 
       // Either lookup a split load or create one.
       LoadInst *PLoad;
@@ -3722,7 +3728,7 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
         IRB.SetInsertPoint(LI);
         PLoad = IRB.CreateAlignedLoad(
             getAdjustedPtr(IRB, DL, LoadBasePtr,
-                           APInt(DL.getPointerSizeInBits(), PartOffset),
+                           APInt(DL.getPointerSizeInBits(AS), PartOffset),
                            PartPtrTy, LoadBasePtr->getName() + "."),
             getAdjustedAlignment(LI, PartOffset, DL), /*IsVolatile*/ false,
             LI->getName());
@@ -3732,7 +3738,7 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
       IRB.SetInsertPoint(SI);
       StoreInst *PStore = IRB.CreateAlignedStore(
           PLoad, getAdjustedPtr(IRB, DL, StoreBasePtr,
-                                APInt(DL.getPointerSizeInBits(), PartOffset),
+                                APInt(DL.getPointerSizeInBits(AS), PartOffset),
                                 PartPtrTy, StoreBasePtr->getName() + "."),
           getAdjustedAlignment(SI, PartOffset, DL), /*IsVolatile*/ false);
 
@@ -3895,8 +3901,8 @@ AllocaInst *SROA::rewritePartition(AllocaInst &AI, AllocaSlices &AS,
   // fact scheduled for promotion.
   unsigned PPWOldSize = PostPromotionWorklist.size();
   unsigned NumUses = 0;
-  SmallPtrSet<PHINode *, 8> PHIUsers;
-  SmallPtrSet<SelectInst *, 8> SelectUsers;
+  SmallSetVector<PHINode *, 8> PHIUsers;
+  SmallSetVector<SelectInst *, 8> SelectUsers;
 
   AllocaSliceRewriter Rewriter(DL, AS, *this, AI, *NewAI, P.beginOffset(),
                                P.endOffset(), IsIntegerPromotable, VecTy,
@@ -3917,19 +3923,16 @@ AllocaInst *SROA::rewritePartition(AllocaInst &AI, AllocaSlices &AS,
 
   // Now that we've processed all the slices in the new partition, check if any
   // PHIs or Selects would block promotion.
-  for (SmallPtrSetImpl<PHINode *>::iterator I = PHIUsers.begin(),
-                                            E = PHIUsers.end();
-       I != E; ++I)
-    if (!isSafePHIToSpeculate(**I)) {
+  for (PHINode *PHI : PHIUsers)
+    if (!isSafePHIToSpeculate(*PHI)) {
       Promotable = false;
       PHIUsers.clear();
       SelectUsers.clear();
       break;
     }
-  for (SmallPtrSetImpl<SelectInst *>::iterator I = SelectUsers.begin(),
-                                               E = SelectUsers.end();
-       I != E; ++I)
-    if (!isSafeSelectToSpeculate(**I)) {
+
+  for (SelectInst *Sel : SelectUsers)
+    if (!isSafeSelectToSpeculate(*Sel)) {
       Promotable = false;
       PHIUsers.clear();
       SelectUsers.clear();
@@ -4208,7 +4211,7 @@ bool SROA::promoteAllocas(Function &F) {
   NumPromoted += PromotableAllocas.size();
 
   DEBUG(dbgs() << "Promoting allocas with mem2reg...\n");
-  PromoteMemToReg(PromotableAllocas, *DT, nullptr, AC);
+  PromoteMemToReg(PromotableAllocas, *DT, AC);
   PromotableAllocas.clear();
   return true;
 }
