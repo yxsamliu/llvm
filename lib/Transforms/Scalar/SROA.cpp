@@ -1519,10 +1519,10 @@ static Value *getAdjustedPtr(IRBuilderTy &IRB, const DataLayout &DL, Value *Ptr,
   do {
     // First fold any existing GEPs into the offset.
     while (GEPOperator *GEP = dyn_cast<GEPOperator>(Ptr)) {
-      APInt GEPOffset(Offset.getBitWidth(), 0);
+      APInt GEPOffset(DL.getPointerTypeSizeInBits(Ptr->getType()), 0);
       if (!GEP->accumulateConstantOffset(DL, GEPOffset))
         break;
-      Offset += GEPOffset;
+      Offset += GEPOffset.zextOrTrunc(Offset.getBitWidth());
       Ptr = GEP->getPointerOperand();
       if (!Visited.insert(Ptr).second)
         break;
