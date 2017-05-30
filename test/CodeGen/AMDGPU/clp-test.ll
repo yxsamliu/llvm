@@ -72,3 +72,6 @@ declare <4 x float> @_Z4fmaxDv4_ff(<4 x float>, float)
 declare <2 x half> @_Z5clampDv2_DhDhDh(<2 x half>, half, half)
 ; HALF: declare half @_Z5clampDhDhDh(half, half, half)
 ; HALF-NOT: declare <2 x half> @_Z5clampDv2_DhDhDh(<2 x half>, half, half)
+
+!opencl.ocl.version = !{!0}
+!0 = !{i32 1, i32 2}

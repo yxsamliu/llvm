@@ -1046,6 +1046,11 @@ AMDGPUclpVectorExpansion::AMDGPUclpVectorExpansion()
 /// process an LLVM module to perform expand vector builtin calls
 ///
 bool AMDGPUclpVectorExpansion::runOnModule(Module &TheModule) {
+  // Do not translate modules from languages other than OpenCL.
+  const char *const OCLVersionMDName = "opencl.ocl.version";
+  if (!TheModule.getNamedMetadata(OCLVersionMDName))
+    return false;
+
   AS = AMDGPU::getAMDGPUAS(TheModule);
   TempModule.reset(
       new Module("__opencllib_vectorexpansion", TheModule.getContext()));
