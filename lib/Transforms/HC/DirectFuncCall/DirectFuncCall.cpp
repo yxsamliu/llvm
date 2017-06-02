@@ -43,6 +43,9 @@ namespace {
           F->removeFnAttr(Attribute::NoInline);
           F->addFnAttr(Attribute::AlwaysInline);
 
+          // Verifier asserts if optnone does not have noinline.
+          F->removeFnAttr(Attribute::OptimizeNone);
+
           if(!F->hasNUses(0))
           {
             string funcName = F->getName().str();
