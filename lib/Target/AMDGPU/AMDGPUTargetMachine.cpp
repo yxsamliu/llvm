@@ -160,7 +160,6 @@ extern "C" void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUConvertAtomicLibCallsPass(*PR);
   initializeAMDGPUOCL12AdapterPass(*PR);
   initializeAMDGPUPrintfRuntimeBindingPass(*PR);
-  initializeAMDGPUclpVectorExpansionPass(*PR);
   initializeAMDGPULowerKernelCallsPass(*PR);
 }
 
@@ -294,8 +293,6 @@ void AMDGPUTargetMachine::addPreLinkPasses(PassManagerBase & PM) {
   if (getTargetTriple().getEnvironment() != Triple::HCC)
     PM.add(llvm::createAMDGPUOCL12AdapterPass());
   PM.add(llvm::createAMDGPUPrintfRuntimeBinding());
-  // ToDo: Do we still need it?
-  //PM.add(llvm::createAMDGPUclpVectorExpansionPass());
 }
 
 static ImmutablePass *createAMDGPUExternalAAWrapperPass() {
