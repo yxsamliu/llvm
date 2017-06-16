@@ -1569,7 +1569,7 @@ static Value *getAdjustedPtr(IRBuilderTy &IRB, const DataLayout &DL, Value *Ptr,
 
   if (!OffsetPtr) {
     if (!Int8Ptr) {
-      Int8Ptr = IRB.CreateBitCast(
+      Int8Ptr = IRB.CreatePointerBitCastOrAddrSpaceCast(
           Ptr, IRB.getInt8PtrTy(PointerTy->getPointerAddressSpace()),
           NamePrefix + "sroa_raw_cast");
       Int8PtrOffset = Offset;
