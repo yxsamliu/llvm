@@ -2687,11 +2687,12 @@ SDValue ARMTargetLowering::LowerConstantPool(SDValue Op,
     auto C = const_cast<Constant*>(CP->getConstVal());
     auto M = const_cast<Module*>(DAG.getMachineFunction().
                                  getFunction()->getParent());
-    auto L = Twine(DAG.getDataLayout().getPrivateGlobalPrefix()) + "CP" +
-             Twine(DAG.getMachineFunction().getFunctionNumber()) + "_" +
-             Twine(AFI->createPICLabelUId());
-    auto GV = new GlobalVariable(*M, T, /*isConstant=*/true,
-                                 GlobalVariable::InternalLinkage, C, L);
+    auto GV = new GlobalVariable(
+                    *M, T, /*isConst=*/true, GlobalVariable::InternalLinkage, C,
+                    Twine(DAG.getDataLayout().getPrivateGlobalPrefix()) + "CP" +
+                    Twine(DAG.getMachineFunction().getFunctionNumber()) + "_" +
+                    Twine(AFI->createPICLabelUId())
+                  );
     SDValue GA = DAG.getTargetGlobalAddress(dyn_cast<GlobalValue>(GV),
                                             dl, PtrVT);
     return LowerGlobalAddress(GA, DAG);
