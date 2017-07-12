@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 //
 // This file declares and defines a pass which selects only code which is
-// expected to be run by an accelerator i.e. referenced directly of indirectly
+// expected to be run by an accelerator i.e. referenced directly or indirectly
 // (through a fully inlineable call-chain) by a [[hc]] function. To support
 // subsequent processing, it also marks all identified functions as AlwaysInline
 // thus making it possible to use only the AlwaysInliner without resorting to a
@@ -34,7 +34,7 @@ using namespace std;
 namespace
 {
     class SelectAcceleratorCode : public ModulePass {
-        unordered_set<Function*> f_;
+        unordered_set<Function*> hcCallees_;
 
         void findAllHCCallees_(const Function &f, Module &M)
         {
@@ -43,7 +43,8 @@ namespace
                     if (y.getOpcode() == Instruction::Call) {
                         auto g = cast<CallInst>(y).getCalledFunction();
                         if (g) {
-                            auto t = f_.insert(M.getFunction(g->getName()));
+                            auto t =
+                                hcCallees_.insert(M.getFunction(g->getName()));
                             if (t.second) findAllHCCallees_(*g, M);
                         }
                     }
@@ -85,7 +86,8 @@ namespace
                 [&]() { return M.begin(); },
                 [&]() { return M.end(); },
                 [&, this](const Function& x) {
-                    return f_.count(M.getFunction(x.getName())) == 0; });
+                    return hcCallees_.count(M.getFunction(x.getName())) == 0;
+                });
         }
 
         bool eraseDeadGlobals_(Module &M) const
@@ -126,7 +128,7 @@ namespace
         {   // TODO: this may represent a valid analysis pass.
             for (auto&& x : M.functions()) {
                 if (x.hasFnAttribute("HC")) {
-                    auto t = f_.insert(M.getFunction(x.getName()));
+                    auto t = hcCallees_.insert(M.getFunction(x.getName()));
                     if (t.second) findAllHCCallees_(x, M);
                 }
             }
