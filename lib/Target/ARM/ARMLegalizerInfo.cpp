@@ -28,10 +28,6 @@ using namespace llvm;
 #error "You shouldn't build this"
 #endif
 
-static bool AEABI(const ARMSubtarget &ST) {
-  return ST.isTargetAEABI() || ST.isTargetGNUAEABI() || ST.isTargetMuslAEABI();
-}
-
 ARMLegalizerInfo::ARMLegalizerInfo(const ARMSubtarget &ST) {
   using namespace TargetOpcode;
 
@@ -59,7 +55,10 @@ ARMLegalizerInfo::ARMLegalizerInfo(const ARMSubtarget &ST) {
 
   for (unsigned Op : {G_SDIV, G_UDIV}) {
     for (auto Ty : {s8, s16})
-      setAction({Op, Ty}, WidenScalar);
+      // FIXME: We need WidenScalar here, but in the case of targets with
+      // software division we'll also need Libcall afterwards. Treat as Custom
+      // until we have better support for chaining legalization actions.
+      setAction({Op, Ty}, Custom);
     if (ST.hasDivideInARMMode())
       setAction({Op, s32}, Legal);
     else
@@ -70,7 +69,8 @@ ARMLegalizerInfo::ARMLegalizerInfo(const ARMSubtarget &ST) {
   for (unsigned Op : {G_SREM, G_UREM})
     if (ST.hasDivideInARMMode())
       setAction({Op, s32}, Lower);
-    else if (AEABI(ST))
+    else if (ST.isTargetAEABI() || ST.isTargetGNUAEABI() ||
+             ST.isTargetMuslAEABI())
       setAction({Op, s32}, Custom);
     else
       setAction({Op, s32}, Libcall);
@@ -83,10 +83,6 @@ ARMLegalizerInfo::ARMLegalizerInfo(const ARMSubtarget &ST) {
 
   setAction({G_GEP, p0}, Legal);
   setAction({G_GEP, 1, s32}, Legal);
-
-  setAction({G_SELECT, s32}, Legal);
-  setAction({G_SELECT, p0}, Legal);
-  setAction({G_SELECT, 1, s1}, Legal);
 
   setAction({G_CONSTANT, s32}, Legal);
 
@@ -119,11 +115,43 @@ bool ARMLegalizerInfo::legalizeCustom(MachineInstr &MI,
                                       MachineIRBuilder &MIRBuilder) const {
   using namespace TargetOpcode;
 
-  MIRBuilder.setInstr(MI);
-
   switch (MI.getOpcode()) {
   default:
     return false;
+  case G_SDIV:
+  case G_UDIV: {
+    LLT Ty = MRI.getType(MI.getOperand(0).getReg());
+    if (Ty != LLT::scalar(16) && Ty != LLT::scalar(8))
+      return false;
+
+    // We need to widen to 32 bits and then maybe, if the target requires,
+    // transform into a libcall.
+    LegalizerHelper Helper(MIRBuilder.getMF());
+
+    MachineInstr *NewMI = nullptr;
+    Helper.MIRBuilder.recordInsertions([&](MachineInstr *MI) {
+      // Store the new, 32-bit div instruction.
+      if (MI->getOpcode() == G_SDIV || MI->getOpcode() == G_UDIV)
+        NewMI = MI;
+    });
+
+    auto Result = Helper.widenScalar(MI, 0, LLT::scalar(32));
+    Helper.MIRBuilder.stopRecordingInsertions();
+    if (Result == LegalizerHelper::UnableToLegalize) {
+      return false;
+    }
+    assert(NewMI && "Couldn't find widened instruction");
+    assert((NewMI->getOpcode() == G_SDIV || NewMI->getOpcode() == G_UDIV) &&
+           "Unexpected widened instruction");
+    assert(MRI.getType(NewMI->getOperand(0).getReg()).getSizeInBits() == 32 &&
+           "Unexpected type for the widened instruction");
+
+    Result = Helper.legalizeInstrStep(*NewMI);
+    if (Result == LegalizerHelper::UnableToLegalize) {
+      return false;
+    }
+    return true;
+  }
   case G_SREM:
   case G_UREM: {
     unsigned OriginalResult = MI.getOperand(0).getReg();
@@ -142,9 +170,9 @@ bool ARMLegalizerInfo::legalizeCustom(MachineInstr &MI,
     auto RetVal = MRI.createGenericVirtualRegister(
         getLLTForType(*RetTy, MIRBuilder.getMF().getDataLayout()));
 
-    auto Status = createLibcall(MIRBuilder, Libcall, {RetVal, RetTy},
-                                {{MI.getOperand(1).getReg(), ArgTy},
-                                 {MI.getOperand(2).getReg(), ArgTy}});
+    auto Status = replaceWithLibcall(MI, MIRBuilder, Libcall, {RetVal, RetTy},
+                                     {{MI.getOperand(1).getReg(), ArgTy},
+                                      {MI.getOperand(2).getReg(), ArgTy}});
     if (Status != LegalizerHelper::Legalized)
       return false;
 
@@ -155,10 +183,7 @@ bool ARMLegalizerInfo::legalizeCustom(MachineInstr &MI,
         {MRI.createGenericVirtualRegister(LLT::scalar(32)), OriginalResult},
         RetVal);
 
-    break;
+    return LegalizerHelper::Legalized;
   }
   }
-
-  MI.eraseFromParent();
-  return true;
 }

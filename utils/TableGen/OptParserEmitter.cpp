@@ -196,9 +196,6 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
       OS << ", nullptr";
 
     // The option meta-variable name (unused).
-    OS << ", nullptr";
-
-    // The option Values (unused for groups).
     OS << ", nullptr)\n";
   }
   OS << "\n";
@@ -285,13 +282,6 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
     OS << ", ";
     if (!isa<UnsetInit>(R.getValueInit("MetaVarName")))
       write_cstring(OS, R.getValueAsString("MetaVarName"));
-    else
-      OS << "nullptr";
-
-    // The option Values. Used for shell autocompletion.
-    OS << ", ";
-    if (!isa<UnsetInit>(R.getValueInit("Values")))
-      write_cstring(OS, R.getValueAsString("Values"));
     else
       OS << "nullptr";
 

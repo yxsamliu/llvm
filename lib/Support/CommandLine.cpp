@@ -24,7 +24,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Config/config.h"
@@ -1523,9 +1522,13 @@ bool parser<unsigned long long>::parse(Option &O, StringRef ArgName,
 // parser<double>/parser<float> implementation
 //
 static bool parseDouble(Option &O, StringRef Arg, double &Value) {
-  if (to_float(Arg, Value))
-    return false;
-  return O.error("'" + Arg + "' value invalid for floating point argument!");
+  SmallString<32> TmpStr(Arg.begin(), Arg.end());
+  const char *ArgStart = TmpStr.c_str();
+  char *End;
+  Value = strtod(ArgStart, &End);
+  if (*End != 0)
+    return O.error("'" + Arg + "' value invalid for floating point argument!");
+  return false;
 }
 
 bool parser<double>::parse(Option &O, StringRef ArgName, StringRef Arg,

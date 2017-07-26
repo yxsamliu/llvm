@@ -1,4 +1,4 @@
-//===- CoverageMapping.cpp - Code coverage mapping support ----------------===//
+//===- CoverageMapping.cpp - Code coverage mapping support ------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -54,26 +54,26 @@ Counter CounterExpressionBuilder::get(const CounterExpression &E) {
   return Counter::getExpression(I);
 }
 
-void CounterExpressionBuilder::extractTerms(Counter C, int Factor,
-                                            SmallVectorImpl<Term> &Terms) {
+void CounterExpressionBuilder::extractTerms(
+    Counter C, int Sign, SmallVectorImpl<std::pair<unsigned, int>> &Terms) {
   switch (C.getKind()) {
   case Counter::Zero:
     break;
   case Counter::CounterValueReference:
-    Terms.emplace_back(C.getCounterID(), Factor);
+    Terms.push_back(std::make_pair(C.getCounterID(), Sign));
     break;
   case Counter::Expression:
     const auto &E = Expressions[C.getExpressionID()];
-    extractTerms(E.LHS, Factor, Terms);
-    extractTerms(
-        E.RHS, E.Kind == CounterExpression::Subtract ? -Factor : Factor, Terms);
+    extractTerms(E.LHS, Sign, Terms);
+    extractTerms(E.RHS, E.Kind == CounterExpression::Subtract ? -Sign : Sign,
+                 Terms);
     break;
   }
 }
 
 Counter CounterExpressionBuilder::simplify(Counter ExpressionTree) {
   // Gather constant terms.
-  SmallVector<Term, 32> Terms;
+  SmallVector<std::pair<unsigned, int>, 32> Terms;
   extractTerms(ExpressionTree, +1, Terms);
 
   // If there are no terms, this is just a zero. The algorithm below assumes at
@@ -82,15 +82,17 @@ Counter CounterExpressionBuilder::simplify(Counter ExpressionTree) {
     return Counter::getZero();
 
   // Group the terms by counter ID.
-  std::sort(Terms.begin(), Terms.end(), [](const Term &LHS, const Term &RHS) {
-    return LHS.CounterID < RHS.CounterID;
+  std::sort(Terms.begin(), Terms.end(),
+            [](const std::pair<unsigned, int> &LHS,
+               const std::pair<unsigned, int> &RHS) {
+    return LHS.first < RHS.first;
   });
 
   // Combine terms by counter ID to eliminate counters that sum to zero.
   auto Prev = Terms.begin();
   for (auto I = Prev + 1, E = Terms.end(); I != E; ++I) {
-    if (I->CounterID == Prev->CounterID) {
-      Prev->Factor += I->Factor;
+    if (I->first == Prev->first) {
+      Prev->second += I->second;
       continue;
     }
     ++Prev;
@@ -101,24 +103,24 @@ Counter CounterExpressionBuilder::simplify(Counter ExpressionTree) {
   Counter C;
   // Create additions. We do this before subtractions to avoid constructs like
   // ((0 - X) + Y), as opposed to (Y - X).
-  for (auto T : Terms) {
-    if (T.Factor <= 0)
+  for (auto Term : Terms) {
+    if (Term.second <= 0)
       continue;
-    for (int I = 0; I < T.Factor; ++I)
+    for (int I = 0; I < Term.second; ++I)
       if (C.isZero())
-        C = Counter::getCounter(T.CounterID);
+        C = Counter::getCounter(Term.first);
       else
         C = get(CounterExpression(CounterExpression::Add, C,
-                                  Counter::getCounter(T.CounterID)));
+                                  Counter::getCounter(Term.first)));
   }
 
   // Create subtractions.
-  for (auto T : Terms) {
-    if (T.Factor >= 0)
+  for (auto Term : Terms) {
+    if (Term.second >= 0)
       continue;
-    for (int I = 0; I < -T.Factor; ++I)
+    for (int I = 0; I < -Term.second; ++I)
       C = get(CounterExpression(CounterExpression::Subtract, C,
-                                Counter::getCounter(T.CounterID)));
+                                Counter::getCounter(Term.first)));
   }
   return C;
 }
@@ -245,6 +247,18 @@ Error CoverageMapping::loadFunctionRecord(
   return Error::success();
 }
 
+Expected<std::unique_ptr<CoverageMapping>>
+CoverageMapping::load(CoverageMappingReader &CoverageReader,
+                      IndexedInstrProfReader &ProfileReader) {
+  auto Coverage = std::unique_ptr<CoverageMapping>(new CoverageMapping());
+
+  for (const auto &Record : CoverageReader)
+    if (Error E = Coverage->loadFunctionRecord(Record, ProfileReader))
+      return std::move(E);
+
+  return std::move(Coverage);
+}
+
 Expected<std::unique_ptr<CoverageMapping>> CoverageMapping::load(
     ArrayRef<std::unique_ptr<CoverageMappingReader>> CoverageReaders,
     IndexedInstrProfReader &ProfileReader) {
@@ -289,8 +303,8 @@ namespace {
 /// An instantiation set is a collection of functions that have the same source
 /// code, ie, template functions specializations.
 class FunctionInstantiationSetCollector {
-  using MapT = DenseMap<std::pair<unsigned, unsigned>,
-                        std::vector<const FunctionRecord *>>;
+  typedef DenseMap<std::pair<unsigned, unsigned>,
+                   std::vector<const FunctionRecord *>> MapT;
   MapT InstantiatedFunctions;
 
 public:
@@ -304,6 +318,7 @@ public:
   }
 
   MapT::iterator begin() { return InstantiatedFunctions.begin(); }
+
   MapT::iterator end() { return InstantiatedFunctions.end(); }
 };
 

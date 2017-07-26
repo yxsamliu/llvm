@@ -271,8 +271,8 @@ struct GCOVEdge {
 /// GCOVFunction - Collects function information.
 class GCOVFunction {
 public:
-  using BlockIterator = pointee_iterator<SmallVectorImpl<
-      std::unique_ptr<GCOVBlock>>::const_iterator>;
+  typedef pointee_iterator<SmallVectorImpl<
+      std::unique_ptr<GCOVBlock>>::const_iterator> BlockIterator;
 
   GCOVFunction(GCOVFile &P) : Parent(P) {}
 
@@ -321,7 +321,7 @@ class GCOVBlock {
   };
 
 public:
-  using EdgeIterator = SmallVectorImpl<GCOVEdge *>::const_iterator;
+  typedef SmallVectorImpl<GCOVEdge *>::const_iterator EdgeIterator;
 
   GCOVBlock(GCOVFunction &P, uint32_t N) : Parent(P), Number(N) {}
   ~GCOVBlock();
@@ -381,10 +381,10 @@ class FileInfo {
   // Therefore this typedef allows LineData.Functions to store multiple
   // functions
   // per instance. This is rare, however, so optimize for the common case.
-  using FunctionVector = SmallVector<const GCOVFunction *, 1>;
-  using FunctionLines = DenseMap<uint32_t, FunctionVector>;
-  using BlockVector = SmallVector<const GCOVBlock *, 4>;
-  using BlockLines = DenseMap<uint32_t, BlockVector>;
+  typedef SmallVector<const GCOVFunction *, 1> FunctionVector;
+  typedef DenseMap<uint32_t, FunctionVector> FunctionLines;
+  typedef SmallVector<const GCOVBlock *, 4> BlockVector;
+  typedef DenseMap<uint32_t, BlockVector> BlockLines;
 
   struct LineData {
     LineData() = default;
@@ -448,8 +448,8 @@ private:
   uint32_t RunCount = 0;
   uint32_t ProgramCount = 0;
 
-  using FileCoverageList = SmallVector<std::pair<std::string, GCOVCoverage>, 4>;
-  using FuncCoverageMap = MapVector<const GCOVFunction *, GCOVCoverage>;
+  typedef SmallVector<std::pair<std::string, GCOVCoverage>, 4> FileCoverageList;
+  typedef MapVector<const GCOVFunction *, GCOVCoverage> FuncCoverageMap;
 
   FileCoverageList FileCoverages;
   FuncCoverageMap FuncCoverages;

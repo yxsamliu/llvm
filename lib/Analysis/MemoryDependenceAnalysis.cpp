@@ -310,11 +310,11 @@ unsigned MemoryDependenceResults::getLoadLoadClobberFullWidthSize(
 }
 
 static bool isVolatile(Instruction *Inst) {
-  if (auto *LI = dyn_cast<LoadInst>(Inst))
+  if (LoadInst *LI = dyn_cast<LoadInst>(Inst))
     return LI->isVolatile();
-  if (auto *SI = dyn_cast<StoreInst>(Inst))
+  else if (StoreInst *SI = dyn_cast<StoreInst>(Inst))
     return SI->isVolatile();
-  if (auto *AI = dyn_cast<AtomicCmpXchgInst>(Inst))
+  else if (AtomicCmpXchgInst *AI = dyn_cast<AtomicCmpXchgInst>(Inst))
     return AI->isVolatile();
   return false;
 }

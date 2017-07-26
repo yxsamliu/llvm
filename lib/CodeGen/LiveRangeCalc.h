@@ -24,7 +24,6 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IndexedMap.h"
 #include "llvm/CodeGen/LiveInterval.h"
 
@@ -66,8 +65,7 @@ class LiveRangeCalc {
   /// registers do not overlap), but the defined/undefined information must
   /// be kept separate for each individual range.
   /// By convention, EntryInfoMap[&LR] = { Defined, Undefined }.
-  typedef DenseMap<LiveRange*,std::pair<BitVector,BitVector>> EntryInfoMap;
-  EntryInfoMap EntryInfos;
+  std::map<LiveRange*,std::pair<BitVector,BitVector>> EntryInfoMap;
 
   /// Map each basic block where a live range is live out to the live-out value
   /// and its defining block.

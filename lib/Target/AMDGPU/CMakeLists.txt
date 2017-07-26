@@ -101,6 +101,7 @@ add_llvm_target(AMDGPUCodeGen
   SIPeepholeSDWA.cpp
   SIRegisterInfo.cpp
   SIShrinkInstructions.cpp
+  SITypeRewriter.cpp
   SIWholeQuadMode.cpp
   GCNIterativeScheduler.cpp
   GCNMinRegStrategy.cpp

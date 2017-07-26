@@ -130,7 +130,7 @@ public:
   /// \brief Return true if given frgment has FT_Dummy type.
   bool isDummy() const { return Kind == FT_Dummy; }
 
-  void dump() const;
+  void dump();
 };
 
 class MCDummyFragment : public MCFragment {

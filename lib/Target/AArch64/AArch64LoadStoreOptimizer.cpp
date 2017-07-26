@@ -795,7 +795,6 @@ AArch64LoadStoreOpt::promoteLoadFromStore(MachineBasicBlock::iterator LoadI,
   int LoadSize = getMemScale(*LoadI);
   int StoreSize = getMemScale(*StoreI);
   unsigned LdRt = getLdStRegOp(*LoadI).getReg();
-  const MachineOperand &StMO = getLdStRegOp(*StoreI);
   unsigned StRt = getLdStRegOp(*StoreI).getReg();
   bool IsStoreXReg = TRI->getRegClass(AArch64::GPR64RegClassID)->contains(StRt);
 
@@ -808,13 +807,7 @@ AArch64LoadStoreOpt::promoteLoadFromStore(MachineBasicBlock::iterator LoadI,
     // Remove the load, if the destination register of the loads is the same
     // register for stored value.
     if (StRt == LdRt && LoadSize == 8) {
-      for (MachineInstr &MI : make_range(StoreI->getIterator(),
-                                         LoadI->getIterator())) {
-        if (MI.killsRegister(StRt, TRI)) {
-          MI.clearRegisterKills(StRt, TRI);
-          break;
-        }
-      }
+      StoreI->clearRegisterKills(StRt, TRI);
       DEBUG(dbgs() << "Remove load instruction:\n    ");
       DEBUG(LoadI->print(dbgs()));
       DEBUG(dbgs() << "\n");
@@ -826,7 +819,7 @@ AArch64LoadStoreOpt::promoteLoadFromStore(MachineBasicBlock::iterator LoadI,
         BuildMI(*LoadI->getParent(), LoadI, LoadI->getDebugLoc(),
                 TII->get(IsStoreXReg ? AArch64::ORRXrs : AArch64::ORRWrs), LdRt)
             .addReg(IsStoreXReg ? AArch64::XZR : AArch64::WZR)
-            .add(StMO)
+            .addReg(StRt)
             .addImm(AArch64_AM::getShifterImm(AArch64_AM::LSL, 0));
   } else {
     // FIXME: Currently we disable this transformation in big-endian targets as
@@ -867,14 +860,14 @@ AArch64LoadStoreOpt::promoteLoadFromStore(MachineBasicBlock::iterator LoadI,
           BuildMI(*LoadI->getParent(), LoadI, LoadI->getDebugLoc(),
                   TII->get(IsStoreXReg ? AArch64::ANDXri : AArch64::ANDWri),
                   DestReg)
-              .add(StMO)
+              .addReg(StRt)
               .addImm(AndMaskEncoded);
     } else {
       BitExtMI =
           BuildMI(*LoadI->getParent(), LoadI, LoadI->getDebugLoc(),
                   TII->get(IsStoreXReg ? AArch64::UBFMXri : AArch64::UBFMWri),
                   DestReg)
-              .add(StMO)
+              .addReg(StRt)
               .addImm(Immr)
               .addImm(Imms);
     }
@@ -883,10 +876,7 @@ AArch64LoadStoreOpt::promoteLoadFromStore(MachineBasicBlock::iterator LoadI,
   // Clear kill flags between store and load.
   for (MachineInstr &MI : make_range(StoreI->getIterator(),
                                      BitExtMI->getIterator()))
-    if (MI.killsRegister(StRt, TRI)) {
-      MI.clearRegisterKills(StRt, TRI);
-      break;
-    }
+    MI.clearRegisterKills(StRt, TRI);
 
   DEBUG(dbgs() << "Promoting load by replacing :\n    ");
   DEBUG(StoreI->print(dbgs()));

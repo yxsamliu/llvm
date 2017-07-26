@@ -21,10 +21,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "hexagontti"
 
-static cl::opt<bool> EmitLookupTables("hexagon-emit-lookup-tables",
-  cl::init(true), cl::Hidden,
-  cl::desc("Control lookup table emission on Hexagon target"));
-
 TargetTransformInfo::PopcntSupportKind
 HexagonTTIImpl::getPopcntSupport(unsigned IntTyWidthInBit) const {
   // Return Fast Hardware support as every input  < 64 bits will be promoted
@@ -33,7 +29,7 @@ HexagonTTIImpl::getPopcntSupport(unsigned IntTyWidthInBit) const {
 }
 
 // The Hexagon target can unroll loops with run-time trip counts.
-void HexagonTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
+void HexagonTTIImpl::getUnrollingPreferences(Loop *L,
                                              TTI::UnrollingPreferences &UP) {
   UP.Runtime = UP.Partial = true;
 }
@@ -50,9 +46,8 @@ unsigned HexagonTTIImpl::getCacheLineSize() const {
   return getST()->getL1CacheLineSize();
 }
 
-int HexagonTTIImpl::getUserCost(const User *U,
-                                ArrayRef<const Value *> Operands) {
-  auto isCastFoldedIntoLoad = [](const CastInst *CI) -> bool {
+int HexagonTTIImpl::getUserCost(const User *U) {
+  auto isCastFoldedIntoLoad = [] (const CastInst *CI) -> bool {
     if (!CI->isIntegerCast())
       return false;
     const LoadInst *LI = dyn_cast<const LoadInst>(CI->getOperand(0));
@@ -72,9 +67,5 @@ int HexagonTTIImpl::getUserCost(const User *U,
   if (const CastInst *CI = dyn_cast<const CastInst>(U))
     if (isCastFoldedIntoLoad(CI))
       return TargetTransformInfo::TCC_Free;
-  return BaseT::getUserCost(U, Operands);
-}
-
-bool HexagonTTIImpl::shouldBuildLookupTables() const {
-   return EmitLookupTables;
+  return BaseT::getUserCost(U);
 }

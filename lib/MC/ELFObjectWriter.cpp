@@ -633,6 +633,9 @@ void ELFObjectWriter::recordRelocation(MCAssembler &Asm,
   MCContext &Ctx = Asm.getContext();
 
   if (const MCSymbolRefExpr *RefB = Target.getSymB()) {
+    assert(RefB->getKind() == MCSymbolRefExpr::VK_None &&
+           "Should not have constructed this");
+
     // Let A, B and C being the components of Target and R be the location of
     // the fixup. If the fixup is not pcrel, we want to compute (A - B + C).
     // If it is pcrel, we want to compute (A - B + C - R).

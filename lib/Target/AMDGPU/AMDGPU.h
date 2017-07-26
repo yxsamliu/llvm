@@ -37,6 +37,7 @@ FunctionPass *createR600ControlFlowFinalizer();
 FunctionPass *createAMDGPUCFGStructurizerPass();
 
 // SI Passes
+FunctionPass *createSITypeRewriter();
 FunctionPass *createSIAnnotateControlFlowPass();
 FunctionPass *createSIFoldOperandsPass();
 FunctionPass *createSIPeepholeSDWAPass();

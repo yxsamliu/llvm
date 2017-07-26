@@ -486,7 +486,7 @@ DecodeStatus ARMDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
     }
   }
 
-  Size = 4;
+  Size = 0;
   return MCDisassembler::Fail;
 }
 

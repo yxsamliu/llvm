@@ -11,7 +11,6 @@
 #define LLVM_DEBUGINFO_CODEVIEW_TYPEINDEXDISCOVERY_H
 
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/DebugInfo/CodeView/SymbolRecord.h"
 #include "llvm/DebugInfo/CodeView/TypeRecord.h"
 #include "llvm/Support/Error.h"
 
@@ -27,13 +26,6 @@ struct TiReference {
 void discoverTypeIndices(ArrayRef<uint8_t> RecordData,
                          SmallVectorImpl<TiReference> &Refs);
 void discoverTypeIndices(const CVType &Type,
-                         SmallVectorImpl<TiReference> &Refs);
-void discoverTypeIndices(const CVType &Type,
-                         SmallVectorImpl<TypeIndex> &Indices);
-
-/// Discover type indices in symbol records. Returns false if this is an unknown
-/// record.
-bool discoverTypeIndices(const CVSymbol &Symbol,
                          SmallVectorImpl<TiReference> &Refs);
 }
 }

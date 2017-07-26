@@ -1006,7 +1006,7 @@ bool LiveDebugVariables::doInitialization(Module &M) {
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-LLVM_DUMP_METHOD void LiveDebugVariables::dump() const {
+LLVM_DUMP_METHOD void LiveDebugVariables::dump() {
   if (pImpl)
     static_cast<LDVImpl*>(pImpl)->print(dbgs());
 }

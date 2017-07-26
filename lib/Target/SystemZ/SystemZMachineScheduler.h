@@ -72,7 +72,7 @@ class SystemZPostRASchedStrategy : public MachineSchedStrategy {
   // A set of SUs with a sorter and dump method.
   struct SUSet : std::set<SUnit*, SUSorter> {
     #ifndef NDEBUG
-    void dump(SystemZHazardRecognizer &HazardRec) const;
+    void dump(SystemZHazardRecognizer &HazardRec);
     #endif
   };
 

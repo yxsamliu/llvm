@@ -100,7 +100,6 @@ public:
   const std::vector<wasm::WasmLimits>& memories() const { return Memories; }
   const std::vector<wasm::WasmGlobal>& globals() const { return Globals; }
   const std::vector<wasm::WasmExport>& exports() const { return Exports; }
-  const wasm::WasmLinkingData& linkingData() const { return LinkingData; }
 
   uint32_t getNumberOfSymbols() const {
     return Symbols.size();
@@ -215,8 +214,6 @@ private:
   std::vector<WasmSymbol> Symbols;
   ArrayRef<uint8_t> CodeSection;
   uint32_t StartFunction = -1;
-  bool HasLinkingSection = false;
-  wasm::WasmLinkingData LinkingData;
 
   StringMap<uint32_t> SymbolMap;
 };

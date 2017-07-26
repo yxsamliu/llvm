@@ -91,7 +91,6 @@ representation.
    CompileCudaWithLLVM
    ReportingGuide
    Benchmarking
-   Docker
 
 :doc:`GettingStarted`
    Discusses how to get up and running quickly with the LLVM infrastructure.
@@ -161,9 +160,6 @@ representation.
 :doc:`Frontend/PerformanceTips`
    A collection of tips for frontend authors on how to generate IR 
    which LLVM is able to effectively optimize.
-
-:doc:`Docker`
-   A reference for using Dockerfiles provided with LLVM.
 
 
 Programming Documentation

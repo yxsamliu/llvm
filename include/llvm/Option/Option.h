@@ -57,7 +57,6 @@ public:
     UnknownClass,
     FlagClass,
     JoinedClass,
-    ValuesClass,
     SeparateClass,
     RemainingArgsClass,
     RemainingArgsJoinedClass,
@@ -156,7 +155,6 @@ public:
     case CommaJoinedClass:
       return RenderCommaJoinedStyle;
     case FlagClass:
-    case ValuesClass:
     case SeparateClass:
     case MultiArgClass:
     case JoinedOrSeparateClass:

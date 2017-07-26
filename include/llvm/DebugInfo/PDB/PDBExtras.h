@@ -1,4 +1,4 @@
-//===- PDBExtras.h - helper functions and classes for PDBs ------*- C++ -*-===//
+//===- PDBExtras.h - helper functions and classes for PDBs -------*- C++-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -10,17 +10,15 @@
 #ifndef LLVM_DEBUGINFO_PDB_PDBEXTRAS_H
 #define LLVM_DEBUGINFO_PDB_PDBEXTRAS_H
 
+#include "PDBTypes.h"
 #include "llvm/DebugInfo/CodeView/CodeView.h"
-#include "llvm/DebugInfo/PDB/PDBTypes.h"
+#include "llvm/Support/raw_ostream.h"
 #include <unordered_map>
 
 namespace llvm {
 
-class raw_ostream;
-
 namespace pdb {
-
-using TagStats = std::unordered_map<PDB_SymType, int>;
+typedef std::unordered_map<PDB_SymType, int> TagStats;
 
 raw_ostream &operator<<(raw_ostream &OS, const PDB_VariantType &Value);
 raw_ostream &operator<<(raw_ostream &OS, const PDB_CallingConv &Conv);
@@ -39,9 +37,7 @@ raw_ostream &operator<<(raw_ostream &OS, const PDB_Machine &Machine);
 raw_ostream &operator<<(raw_ostream &OS, const Variant &Value);
 raw_ostream &operator<<(raw_ostream &OS, const VersionInfo &Version);
 raw_ostream &operator<<(raw_ostream &OS, const TagStats &Stats);
+}
+}
 
-} // end namespace pdb
-
-} // end namespace llvm
-
-#endif // LLVM_DEBUGINFO_PDB_PDBEXTRAS_H
+#endif

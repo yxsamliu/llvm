@@ -152,14 +152,9 @@ public:
     return getOpcode() == AShr;
   }
 
-  /// Determine if the Opcode is and/or/xor.
-  static inline bool isBitwiseLogicOp(unsigned Opcode) {
-    return Opcode == And || Opcode == Or || Opcode == Xor;
-  }
-
   /// Return true if this is and/or/xor.
   inline bool isBitwiseLogicOp() const {
-    return isBitwiseLogicOp(getOpcode());
+    return getOpcode() == And || getOpcode() == Or || getOpcode() == Xor;
   }
 
   /// Determine if the OpCode is one of the CastInst instructions.
@@ -556,7 +551,7 @@ public:
 
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static bool classof(const Value *V) {
+  static inline bool classof(const Value *V) {
     return V->getValueID() >= Value::InstructionVal;
   }
 

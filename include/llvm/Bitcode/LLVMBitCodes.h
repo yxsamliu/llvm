@@ -22,7 +22,7 @@
 
 namespace llvm {
 namespace bitc {
-// The only top-level block types are MODULE, IDENTIFICATION, STRTAB and SYMTAB.
+// The only top-level block types are MODULE, IDENTIFICATION and STRTAB.
 enum BlockIDs {
   // Blocks
   MODULE_BLOCK_ID = FIRST_APPLICATION_BLOCKID,
@@ -57,8 +57,6 @@ enum BlockIDs {
   STRTAB_BLOCK_ID,
 
   FULL_LTO_GLOBALVAL_SUMMARY_BLOCK_ID,
-
-  SYMTAB_BLOCK_ID,
 };
 
 /// Identification block contains a string that describes the producer details,
@@ -577,10 +575,6 @@ enum ComdatSelectionKindCodes {
 
 enum StrtabCodes {
   STRTAB_BLOB = 1,
-};
-
-enum SymtabCodes {
-  SYMTAB_BLOB = 1,
 };
 
 } // End bitc namespace

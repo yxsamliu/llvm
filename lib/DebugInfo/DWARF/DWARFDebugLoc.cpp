@@ -40,9 +40,9 @@ void DWARFDebugLoc::dump(raw_ostream &OS) const {
   }
 }
 
-void DWARFDebugLoc::parse(const DWARFDataExtractor &data) {
+void DWARFDebugLoc::parse(DataExtractor data, unsigned AddressSize) {
   uint32_t Offset = 0;
-  while (data.isValidOffset(Offset+data.getAddressSize()-1)) {
+  while (data.isValidOffset(Offset+AddressSize-1)) {
     Locations.resize(Locations.size() + 1);
     LocationList &Loc = Locations.back();
     Loc.Offset = Offset;
@@ -51,8 +51,8 @@ void DWARFDebugLoc::parse(const DWARFDataExtractor &data) {
     while (true) {
       // A beginning and ending address offsets.
       Entry E;
-      E.Begin = data.getRelocatedAddress(&Offset);
-      E.End = data.getRelocatedAddress(&Offset);
+      E.Begin = getRelocatedValue(data, AddressSize, &Offset, &RelocMap);
+      E.End = getRelocatedValue(data, AddressSize, &Offset, &RelocMap);
 
       // The end of any given location list is marked by an end of list entry,
       // which consists of a 0 for the beginning address offset and a 0 for the

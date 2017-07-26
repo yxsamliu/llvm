@@ -410,7 +410,7 @@ uint64_t ComputeHash(StringRef K);
 /// on how PGO name is formed.
 class InstrProfSymtab {
 public:
-  using AddrHashMap = std::vector<std::pair<uint64_t, uint64_t>>;
+  typedef std::vector<std::pair<uint64_t, uint64_t>> AddrHashMap;
 
 private:
   StringRef Data;
@@ -598,30 +598,8 @@ struct InstrProfRecord {
   InstrProfRecord() = default;
   InstrProfRecord(StringRef Name, uint64_t Hash, std::vector<uint64_t> Counts)
       : Name(Name), Hash(Hash), Counts(std::move(Counts)) {}
-  InstrProfRecord(InstrProfRecord &&) = default;
-  InstrProfRecord(const InstrProfRecord &RHS)
-      : Name(RHS.Name), Hash(RHS.Hash), Counts(RHS.Counts), SIPE(RHS.SIPE),
-        ValueData(RHS.ValueData
-                      ? llvm::make_unique<ValueProfData>(*RHS.ValueData)
-                      : nullptr) {}
-  InstrProfRecord &operator=(InstrProfRecord &&) = default;
-  InstrProfRecord &operator=(const InstrProfRecord &RHS) {
-    Name = RHS.Name;
-    Hash = RHS.Hash;
-    Counts = RHS.Counts;
-    SIPE = RHS.SIPE;
-    if (!RHS.ValueData) {
-      ValueData = nullptr;
-      return *this;
-    }
-    if (!ValueData)
-      ValueData = llvm::make_unique<ValueProfData>(*RHS.ValueData);
-    else
-      *ValueData = *RHS.ValueData;
-    return *this;
-  }
 
-  using ValueMapType = std::vector<std::pair<uint64_t, uint64_t>>;
+  typedef std::vector<std::pair<uint64_t, uint64_t>> ValueMapType;
 
   /// Return the number of value profile kinds with non-zero number
   /// of profile sites.
@@ -669,9 +647,12 @@ struct InstrProfRecord {
 
   /// Sort value profile data (per site) by count.
   void sortValueData() {
-    for (uint32_t Kind = IPVK_First; Kind <= IPVK_Last; ++Kind)
-      for (auto &SR : getValueSitesForKind(Kind))
+    for (uint32_t Kind = IPVK_First; Kind <= IPVK_Last; ++Kind) {
+      std::vector<InstrProfValueSiteRecord> &SiteRecords =
+          getValueSitesForKind(Kind);
+      for (auto &SR : SiteRecords)
         SR.sortByCount();
+    }
   }
 
   /// Clear value data entries and edge counters.
@@ -681,54 +662,36 @@ struct InstrProfRecord {
   }
 
   /// Clear value data entries
-  void clearValueData() { ValueData = nullptr; }
+  void clearValueData() {
+    for (uint32_t Kind = IPVK_First; Kind <= IPVK_Last; ++Kind)
+      getValueSitesForKind(Kind).clear();
+  }
 
   /// Get the error contained within the record's soft error counter.
   Error takeError() { return SIPE.takeError(); }
 
 private:
-  struct ValueProfData {
-    std::vector<InstrProfValueSiteRecord> IndirectCallSites;
-    std::vector<InstrProfValueSiteRecord> MemOPSizes;
-  };
-  std::unique_ptr<ValueProfData> ValueData;
+  std::vector<InstrProfValueSiteRecord> IndirectCallSites;
+  std::vector<InstrProfValueSiteRecord> MemOPSizes;
+  const std::vector<InstrProfValueSiteRecord> &
 
-  MutableArrayRef<InstrProfValueSiteRecord>
-  getValueSitesForKind(uint32_t ValueKind) {
-    // Cast to /add/ const (should be an implicit_cast, ideally, if that's ever
-    // implemented in LLVM) to call the const overload of this function, then
-    // cast away the constness from the result.
-    auto AR = const_cast<const InstrProfRecord *>(this)->getValueSitesForKind(
-        ValueKind);
-    return makeMutableArrayRef(
-        const_cast<InstrProfValueSiteRecord *>(AR.data()), AR.size());
-  }
-  ArrayRef<InstrProfValueSiteRecord>
   getValueSitesForKind(uint32_t ValueKind) const {
-    if (!ValueData)
-      return None;
     switch (ValueKind) {
     case IPVK_IndirectCallTarget:
-      return ValueData->IndirectCallSites;
+      return IndirectCallSites;
     case IPVK_MemOPSize:
-      return ValueData->MemOPSizes;
+      return MemOPSizes;
     default:
       llvm_unreachable("Unknown value kind!");
     }
+    return IndirectCallSites;
   }
 
   std::vector<InstrProfValueSiteRecord> &
-  getOrCreateValueSitesForKind(uint32_t ValueKind) {
-    if (!ValueData)
-      ValueData = llvm::make_unique<ValueProfData>();
-    switch (ValueKind) {
-    case IPVK_IndirectCallTarget:
-      return ValueData->IndirectCallSites;
-    case IPVK_MemOPSize:
-      return ValueData->MemOPSizes;
-    default:
-      llvm_unreachable("Unknown value kind!");
-    }
+  getValueSitesForKind(uint32_t ValueKind) {
+    return const_cast<std::vector<InstrProfValueSiteRecord> &>(
+        const_cast<const InstrProfRecord *>(this)
+            ->getValueSitesForKind(ValueKind));
   }
 
   // Map indirect call target name hash to name string.
@@ -753,8 +716,11 @@ uint32_t InstrProfRecord::getNumValueKinds() const {
 
 uint32_t InstrProfRecord::getNumValueData(uint32_t ValueKind) const {
   uint32_t N = 0;
-  for (auto &SR : getValueSitesForKind(ValueKind))
+  const std::vector<InstrProfValueSiteRecord> &SiteRecords =
+      getValueSitesForKind(ValueKind);
+  for (auto &SR : SiteRecords) {
     N += SR.ValueData.size();
+  }
   return N;
 }
 
@@ -799,9 +765,9 @@ uint64_t InstrProfRecord::getValueForSite(InstrProfValueData Dest[],
 }
 
 void InstrProfRecord::reserveSites(uint32_t ValueKind, uint32_t NumValueSites) {
-  if (!NumValueSites)
-    return;
-  getOrCreateValueSitesForKind(ValueKind).reserve(NumValueSites);
+  std::vector<InstrProfValueSiteRecord> &ValueSites =
+      getValueSitesForKind(ValueKind);
+  ValueSites.reserve(NumValueSites);
 }
 
 inline support::endianness getHostEndianness() {
@@ -912,11 +878,6 @@ struct Summary {
   // The number of Cutoff Entries (Summary::Entry) following summary fields.
   uint64_t NumCutoffEntries;
 
-  Summary() = delete;
-  Summary(uint32_t Size) { memset(this, 0, Size); }
-
-  void operator delete(void *ptr) { ::operator delete(ptr); }
-
   static uint32_t getSize(uint32_t NumSumFields, uint32_t NumCutoffEntries) {
     return sizeof(Summary) + NumCutoffEntries * sizeof(Entry) +
            NumSumFields * sizeof(uint64_t);
@@ -955,6 +916,11 @@ struct Summary {
     ER.MinBlockCount = E.MinCount;
     ER.NumBlocks = E.NumCounts;
   }
+
+  Summary(uint32_t Size) { memset(this, 0, Size); }
+  void operator delete(void *ptr) { ::operator delete(ptr); }
+
+  Summary() = delete;
 };
 
 inline std::unique_ptr<Summary> allocSummary(uint32_t TotalSize) {

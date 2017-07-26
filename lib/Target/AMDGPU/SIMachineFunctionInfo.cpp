@@ -75,7 +75,7 @@ SIMachineFunctionInfo::SIMachineFunctionInfo(const MachineFunction &MF)
     WorkItemIDX(false),
     WorkItemIDY(false),
     WorkItemIDZ(false),
-    ImplicitBufferPtr(false) {
+    PrivateMemoryInputPtr(false) {
   const SISubtarget &ST = MF.getSubtarget<SISubtarget>();
   const Function *F = MF.getFunction();
   FlatWorkGroupSizes = ST.getFlatWorkGroupSizes(*F);
@@ -87,7 +87,6 @@ SIMachineFunctionInfo::SIMachineFunctionInfo(const MachineFunction &MF)
     ScratchRSrcReg = AMDGPU::SGPR0_SGPR1_SGPR2_SGPR3;
     ScratchWaveOffsetReg = AMDGPU::SGPR4;
     FrameOffsetReg = AMDGPU::SGPR5;
-    StackPtrOffsetReg = AMDGPU::SGPR32;
     return;
   }
 
@@ -152,7 +151,7 @@ SIMachineFunctionInfo::SIMachineFunctionInfo(const MachineFunction &MF)
       DispatchID = true;
   } else if (ST.isMesaGfxShader(MF)) {
     if (HasStackObjects || MaySpill)
-      ImplicitBufferPtr = true;
+      PrivateMemoryInputPtr = true;
   }
 
   // We don't need to worry about accessing spills with flat instructions.
@@ -205,11 +204,11 @@ unsigned SIMachineFunctionInfo::addFlatScratchInit(const SIRegisterInfo &TRI) {
   return FlatScratchInitUserSGPR;
 }
 
-unsigned SIMachineFunctionInfo::addImplicitBufferPtr(const SIRegisterInfo &TRI) {
-  ImplicitBufferPtrUserSGPR = TRI.getMatchingSuperReg(
+unsigned SIMachineFunctionInfo::addPrivateMemoryPtr(const SIRegisterInfo &TRI) {
+  PrivateMemoryPtrUserSGPR = TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SReg_64RegClass);
   NumUserSGPRs += 2;
-  return ImplicitBufferPtrUserSGPR;
+  return PrivateMemoryPtrUserSGPR;
 }
 
 /// Reserve a slice of a VGPR to support spilling for FrameIndex \p FI.

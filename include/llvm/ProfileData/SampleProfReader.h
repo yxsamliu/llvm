@@ -350,7 +350,7 @@ public:
 class SampleProfileReaderBinary : public SampleProfileReader {
 public:
   SampleProfileReaderBinary(std::unique_ptr<MemoryBuffer> B, LLVMContext &C)
-      : SampleProfileReader(std::move(B), C) {}
+      : SampleProfileReader(std::move(B), C), Data(nullptr), End(nullptr) {}
 
   /// \brief Read and validate the file header.
   std::error_code readHeader() override;
@@ -388,10 +388,10 @@ protected:
   std::error_code readProfile(FunctionSamples &FProfile);
 
   /// \brief Points to the current location in the buffer.
-  const uint8_t *Data = nullptr;
+  const uint8_t *Data;
 
   /// \brief Points to the end of the buffer.
-  const uint8_t *End = nullptr;
+  const uint8_t *End;
 
   /// Function name table.
   std::vector<StringRef> NameTable;
@@ -403,7 +403,7 @@ private:
   std::error_code readSummary();
 };
 
-using InlineCallStack = SmallVector<FunctionSamples *, 10>;
+typedef SmallVector<FunctionSamples *, 10> InlineCallStack;
 
 // Supported histogram types in GCC.  Currently, we only need support for
 // call target histograms.

@@ -39,7 +39,7 @@ private:
   /// A function of this type is used to perform value split action.
   typedef std::function<void(ArrayRef<unsigned>)> SplitArgTy;
 
-  bool splitToValueTypes(const ArgInfo &OrigArgInfo,
+  void splitToValueTypes(const ArgInfo &OrigArgInfo,
                          SmallVectorImpl<ArgInfo> &SplitArgs,
                          const DataLayout &DL, MachineRegisterInfo &MRI,
                          SplitArgTy SplitArg) const;

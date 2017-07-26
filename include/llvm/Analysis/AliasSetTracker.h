@@ -69,15 +69,10 @@ class AliasSet : public ilist_node<AliasSet> {
       if (AAInfo == DenseMapInfo<AAMDNodes>::getEmptyKey())
         // We don't have a AAInfo yet. Set it to NewAAInfo.
         AAInfo = NewAAInfo;
-      else {
-        AAMDNodes Intersection(AAInfo.intersect(NewAAInfo));
-        if (!Intersection) {
-          // NewAAInfo conflicts with AAInfo.
-          AAInfo = DenseMapInfo<AAMDNodes>::getTombstoneKey();
-          return SizeChanged;
-        }
-        AAInfo = Intersection;
-      }
+      else if (AAInfo != NewAAInfo)
+        // NewAAInfo conflicts with AAInfo.
+        AAInfo = DenseMapInfo<AAMDNodes>::getTombstoneKey();
+
       return SizeChanged;
     }
 

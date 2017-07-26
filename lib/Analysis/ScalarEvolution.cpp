@@ -126,7 +126,7 @@ static cl::opt<bool>
 static cl::opt<unsigned> MulOpsInlineThreshold(
     "scev-mulops-inline-threshold", cl::Hidden,
     cl::desc("Threshold for inlining multiplication operands into a SCEV"),
-    cl::init(32));
+    cl::init(1000));
 
 static cl::opt<unsigned> AddOpsInlineThreshold(
     "scev-addops-inline-threshold", cl::Hidden,
@@ -156,11 +156,6 @@ static cl::opt<unsigned>
 static cl::opt<unsigned> MaxConstantEvolvingDepth(
     "scalar-evolution-max-constant-evolving-depth", cl::Hidden,
     cl::desc("Maximum depth of recursive constant evolving"), cl::init(32));
-
-static cl::opt<unsigned>
-    MaxExtDepth("scalar-evolution-max-ext-depth", cl::Hidden,
-                cl::desc("Maximum depth of recursive SExt/ZExt"),
-                cl::init(8));
 
 //===----------------------------------------------------------------------===//
 //                           SCEV class definitions
@@ -1264,12 +1259,12 @@ static const SCEV *getSignedOverflowLimitForStep(const SCEV *Step,
   if (SE->isKnownPositive(Step)) {
     *Pred = ICmpInst::ICMP_SLT;
     return SE->getConstant(APInt::getSignedMinValue(BitWidth) -
-                           SE->getSignedRangeMax(Step));
+                           SE->getSignedRange(Step).getSignedMax());
   }
   if (SE->isKnownNegative(Step)) {
     *Pred = ICmpInst::ICMP_SGT;
     return SE->getConstant(APInt::getSignedMaxValue(BitWidth) -
-                           SE->getSignedRangeMin(Step));
+                           SE->getSignedRange(Step).getSignedMin());
   }
   return nullptr;
 }
@@ -1284,14 +1279,14 @@ static const SCEV *getUnsignedOverflowLimitForStep(const SCEV *Step,
   *Pred = ICmpInst::ICMP_ULT;
 
   return SE->getConstant(APInt::getMinValue(BitWidth) -
-                         SE->getUnsignedRangeMax(Step));
+                         SE->getUnsignedRange(Step).getUnsignedMax());
 }
 
 namespace {
 
 struct ExtendOpTraitsBase {
-  typedef const SCEV *(ScalarEvolution::*GetExtendExprTy)(const SCEV *, Type *,
-                                                          unsigned);
+  typedef const SCEV *(ScalarEvolution::*GetExtendExprTy)(
+      const SCEV *, Type *, ScalarEvolution::ExtendCacheTy &Cache);
 };
 
 // Used to make code generic over signed and unsigned overflow.
@@ -1320,8 +1315,9 @@ struct ExtendOpTraits<SCEVSignExtendExpr> : public ExtendOpTraitsBase {
   }
 };
 
-const ExtendOpTraitsBase::GetExtendExprTy ExtendOpTraits<
-    SCEVSignExtendExpr>::GetExtendExpr = &ScalarEvolution::getSignExtendExpr;
+const ExtendOpTraitsBase::GetExtendExprTy
+    ExtendOpTraits<SCEVSignExtendExpr>::GetExtendExpr =
+        &ScalarEvolution::getSignExtendExprCached;
 
 template <>
 struct ExtendOpTraits<SCEVZeroExtendExpr> : public ExtendOpTraitsBase {
@@ -1336,8 +1332,9 @@ struct ExtendOpTraits<SCEVZeroExtendExpr> : public ExtendOpTraitsBase {
   }
 };
 
-const ExtendOpTraitsBase::GetExtendExprTy ExtendOpTraits<
-    SCEVZeroExtendExpr>::GetExtendExpr = &ScalarEvolution::getZeroExtendExpr;
+const ExtendOpTraitsBase::GetExtendExprTy
+    ExtendOpTraits<SCEVZeroExtendExpr>::GetExtendExpr =
+        &ScalarEvolution::getZeroExtendExprCached;
 }
 
 // The recurrence AR has been shown to have no signed/unsigned wrap or something
@@ -1349,7 +1346,8 @@ const ExtendOpTraitsBase::GetExtendExprTy ExtendOpTraits<
 // "sext/zext(PostIncAR)"
 template <typename ExtendOpTy>
 static const SCEV *getPreStartForExtend(const SCEVAddRecExpr *AR, Type *Ty,
-                                        ScalarEvolution *SE, unsigned Depth) {
+                                        ScalarEvolution *SE,
+                                        ScalarEvolution::ExtendCacheTy &Cache) {
   auto WrapType = ExtendOpTraits<ExtendOpTy>::WrapType;
   auto GetExtendExpr = ExtendOpTraits<ExtendOpTy>::GetExtendExpr;
 
@@ -1396,9 +1394,9 @@ static const SCEV *getPreStartForExtend(const SCEVAddRecExpr *AR, Type *Ty,
   unsigned BitWidth = SE->getTypeSizeInBits(AR->getType());
   Type *WideTy = IntegerType::get(SE->getContext(), BitWidth * 2);
   const SCEV *OperandExtendedStart =
-      SE->getAddExpr((SE->*GetExtendExpr)(PreStart, WideTy, Depth),
-                     (SE->*GetExtendExpr)(Step, WideTy, Depth));
-  if ((SE->*GetExtendExpr)(Start, WideTy, Depth) == OperandExtendedStart) {
+      SE->getAddExpr((SE->*GetExtendExpr)(PreStart, WideTy, Cache),
+                     (SE->*GetExtendExpr)(Step, WideTy, Cache));
+  if ((SE->*GetExtendExpr)(Start, WideTy, Cache) == OperandExtendedStart) {
     if (PreAR && AR->getNoWrapFlags(WrapType)) {
       // If we know `AR` == {`PreStart`+`Step`,+,`Step`} is `WrapType` (FlagNSW
       // or FlagNUW) and that `PreStart` + `Step` is `WrapType` too, then
@@ -1424,16 +1422,16 @@ static const SCEV *getPreStartForExtend(const SCEVAddRecExpr *AR, Type *Ty,
 template <typename ExtendOpTy>
 static const SCEV *getExtendAddRecStart(const SCEVAddRecExpr *AR, Type *Ty,
                                         ScalarEvolution *SE,
-                                        unsigned Depth) {
+                                        ScalarEvolution::ExtendCacheTy &Cache) {
   auto GetExtendExpr = ExtendOpTraits<ExtendOpTy>::GetExtendExpr;
 
-  const SCEV *PreStart = getPreStartForExtend<ExtendOpTy>(AR, Ty, SE, Depth);
+  const SCEV *PreStart = getPreStartForExtend<ExtendOpTy>(AR, Ty, SE, Cache);
   if (!PreStart)
-    return (SE->*GetExtendExpr)(AR->getStart(), Ty, Depth);
+    return (SE->*GetExtendExpr)(AR->getStart(), Ty, Cache);
 
-  return SE->getAddExpr((SE->*GetExtendExpr)(AR->getStepRecurrence(*SE), Ty,
-                                             Depth),
-                        (SE->*GetExtendExpr)(PreStart, Ty, Depth));
+  return SE->getAddExpr(
+      (SE->*GetExtendExpr)(AR->getStepRecurrence(*SE), Ty, Cache),
+      (SE->*GetExtendExpr)(PreStart, Ty, Cache));
 }
 
 // Try to prove away overflow by looking at "nearby" add recurrences.  A
@@ -1513,8 +1511,31 @@ bool ScalarEvolution::proveNoWrapByVaryingStart(const SCEV *Start,
   return false;
 }
 
-const SCEV *
-ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
+const SCEV *ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty) {
+  // Use the local cache to prevent exponential behavior of
+  // getZeroExtendExprImpl.
+  ExtendCacheTy Cache;
+  return getZeroExtendExprCached(Op, Ty, Cache);
+}
+
+/// Query \p Cache before calling getZeroExtendExprImpl. If there is no
+/// related entry in the \p Cache, call getZeroExtendExprImpl and save
+/// the result in the \p Cache.
+const SCEV *ScalarEvolution::getZeroExtendExprCached(const SCEV *Op, Type *Ty,
+                                                     ExtendCacheTy &Cache) {
+  auto It = Cache.find({Op, Ty});
+  if (It != Cache.end())
+    return It->second;
+  const SCEV *ZExt = getZeroExtendExprImpl(Op, Ty, Cache);
+  auto InsertResult = Cache.insert({{Op, Ty}, ZExt});
+  assert(InsertResult.second && "Expect the key was not in the cache");
+  (void)InsertResult;
+  return ZExt;
+}
+
+/// The real implementation of getZeroExtendExpr.
+const SCEV *ScalarEvolution::getZeroExtendExprImpl(const SCEV *Op, Type *Ty,
+                                                   ExtendCacheTy &Cache) {
   assert(getTypeSizeInBits(Op->getType()) < getTypeSizeInBits(Ty) &&
          "This is not an extending conversion!");
   assert(isSCEVable(Ty) &&
@@ -1524,11 +1545,11 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
   // Fold if the operand is constant.
   if (const SCEVConstant *SC = dyn_cast<SCEVConstant>(Op))
     return getConstant(
-      cast<ConstantInt>(ConstantExpr::getZExt(SC->getValue(), Ty)));
+        cast<ConstantInt>(ConstantExpr::getZExt(SC->getValue(), Ty)));
 
   // zext(zext(x)) --> zext(x)
   if (const SCEVZeroExtendExpr *SZ = dyn_cast<SCEVZeroExtendExpr>(Op))
-    return getZeroExtendExpr(SZ->getOperand(), Ty, Depth + 1);
+    return getZeroExtendExprCached(SZ->getOperand(), Ty, Cache);
 
   // Before doing any expensive analysis, check to see if we've already
   // computed a SCEV for this Op and Ty.
@@ -1538,12 +1559,6 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
   ID.AddPointer(Ty);
   void *IP = nullptr;
   if (const SCEV *S = UniqueSCEVs.FindNodeOrInsertPos(ID, IP)) return S;
-  if (Depth > MaxExtDepth) {
-    SCEV *S = new (SCEVAllocator) SCEVZeroExtendExpr(ID.Intern(SCEVAllocator),
-                                                     Op, Ty);
-    UniqueSCEVs.InsertNode(S, IP);
-    return S;
-  }
 
   // zext(trunc(x)) --> zext(x) or x or trunc(x)
   if (const SCEVTruncateExpr *ST = dyn_cast<SCEVTruncateExpr>(Op)) {
@@ -1578,8 +1593,8 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
       // we don't need to do any further analysis.
       if (AR->hasNoUnsignedWrap())
         return getAddRecExpr(
-            getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this, Depth + 1),
-            getZeroExtendExpr(Step, Ty, Depth + 1), L, AR->getNoWrapFlags());
+            getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this, Cache),
+            getZeroExtendExprCached(Step, Ty, Cache), L, AR->getNoWrapFlags());
 
       // Check whether the backedge-taken count is SCEVCouldNotCompute.
       // Note that this serves two purposes: It filters out loops that are
@@ -1603,29 +1618,22 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
         if (MaxBECount == RecastedMaxBECount) {
           Type *WideTy = IntegerType::get(getContext(), BitWidth * 2);
           // Check whether Start+Step*MaxBECount has no unsigned overflow.
-          const SCEV *ZMul = getMulExpr(CastedMaxBECount, Step,
-                                        SCEV::FlagAnyWrap, Depth + 1);
-          const SCEV *ZAdd = getZeroExtendExpr(getAddExpr(Start, ZMul,
-                                                          SCEV::FlagAnyWrap,
-                                                          Depth + 1),
-                                               WideTy, Depth + 1);
-          const SCEV *WideStart = getZeroExtendExpr(Start, WideTy, Depth + 1);
+          const SCEV *ZMul = getMulExpr(CastedMaxBECount, Step);
+          const SCEV *ZAdd =
+              getZeroExtendExprCached(getAddExpr(Start, ZMul), WideTy, Cache);
+          const SCEV *WideStart = getZeroExtendExprCached(Start, WideTy, Cache);
           const SCEV *WideMaxBECount =
-            getZeroExtendExpr(CastedMaxBECount, WideTy, Depth + 1);
-          const SCEV *OperandExtendedAdd =
-            getAddExpr(WideStart,
-                       getMulExpr(WideMaxBECount,
-                                  getZeroExtendExpr(Step, WideTy, Depth + 1),
-                                  SCEV::FlagAnyWrap, Depth + 1),
-                       SCEV::FlagAnyWrap, Depth + 1);
+              getZeroExtendExprCached(CastedMaxBECount, WideTy, Cache);
+          const SCEV *OperandExtendedAdd = getAddExpr(
+              WideStart, getMulExpr(WideMaxBECount, getZeroExtendExprCached(
+                                                        Step, WideTy, Cache)));
           if (ZAdd == OperandExtendedAdd) {
             // Cache knowledge of AR NUW, which is propagated to this AddRec.
             const_cast<SCEVAddRecExpr *>(AR)->setNoWrapFlags(SCEV::FlagNUW);
             // Return the expression with the addrec on the outside.
             return getAddRecExpr(
-                getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this,
-                                                         Depth + 1),
-                getZeroExtendExpr(Step, Ty, Depth + 1), L,
+                getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this, Cache),
+                getZeroExtendExprCached(Step, Ty, Cache), L,
                 AR->getNoWrapFlags());
           }
           // Similar to above, only this time treat the step value as signed.
@@ -1633,19 +1641,15 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
           OperandExtendedAdd =
             getAddExpr(WideStart,
                        getMulExpr(WideMaxBECount,
-                                  getSignExtendExpr(Step, WideTy, Depth + 1),
-                                  SCEV::FlagAnyWrap, Depth + 1),
-                       SCEV::FlagAnyWrap, Depth + 1);
+                                  getSignExtendExpr(Step, WideTy)));
           if (ZAdd == OperandExtendedAdd) {
             // Cache knowledge of AR NW, which is propagated to this AddRec.
             // Negative step causes unsigned wrap, but it still can't self-wrap.
             const_cast<SCEVAddRecExpr *>(AR)->setNoWrapFlags(SCEV::FlagNW);
             // Return the expression with the addrec on the outside.
             return getAddRecExpr(
-                getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this,
-                                                         Depth + 1),
-                getSignExtendExpr(Step, Ty, Depth + 1), L,
-                AR->getNoWrapFlags());
+                getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this, Cache),
+                getSignExtendExpr(Step, Ty), L, AR->getNoWrapFlags());
           }
         }
       }
@@ -1666,7 +1670,7 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
         // is safe.
         if (isKnownPositive(Step)) {
           const SCEV *N = getConstant(APInt::getMinValue(BitWidth) -
-                                      getUnsignedRangeMax(Step));
+                                      getUnsignedRange(Step).getUnsignedMax());
           if (isLoopBackedgeGuardedByCond(L, ICmpInst::ICMP_ULT, AR, N) ||
               (isLoopEntryGuardedByCond(L, ICmpInst::ICMP_ULT, Start, N) &&
                isLoopBackedgeGuardedByCond(L, ICmpInst::ICMP_ULT,
@@ -1676,14 +1680,13 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
             const_cast<SCEVAddRecExpr *>(AR)->setNoWrapFlags(SCEV::FlagNUW);
             // Return the expression with the addrec on the outside.
             return getAddRecExpr(
-                getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this,
-                                                         Depth + 1),
-                getZeroExtendExpr(Step, Ty, Depth + 1), L,
+                getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this, Cache),
+                getZeroExtendExprCached(Step, Ty, Cache), L,
                 AR->getNoWrapFlags());
           }
         } else if (isKnownNegative(Step)) {
           const SCEV *N = getConstant(APInt::getMaxValue(BitWidth) -
-                                      getSignedRangeMin(Step));
+                                      getSignedRange(Step).getSignedMin());
           if (isLoopBackedgeGuardedByCond(L, ICmpInst::ICMP_UGT, AR, N) ||
               (isLoopEntryGuardedByCond(L, ICmpInst::ICMP_UGT, Start, N) &&
                isLoopBackedgeGuardedByCond(L, ICmpInst::ICMP_UGT,
@@ -1694,10 +1697,8 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
             const_cast<SCEVAddRecExpr *>(AR)->setNoWrapFlags(SCEV::FlagNW);
             // Return the expression with the addrec on the outside.
             return getAddRecExpr(
-                getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this,
-                                                         Depth + 1),
-                getSignExtendExpr(Step, Ty, Depth + 1), L,
-                AR->getNoWrapFlags());
+                getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this, Cache),
+                getSignExtendExpr(Step, Ty), L, AR->getNoWrapFlags());
           }
         }
       }
@@ -1705,8 +1706,8 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
       if (proveNoWrapByVaryingStart<SCEVZeroExtendExpr>(Start, Step, L)) {
         const_cast<SCEVAddRecExpr *>(AR)->setNoWrapFlags(SCEV::FlagNUW);
         return getAddRecExpr(
-            getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this, Depth + 1),
-            getZeroExtendExpr(Step, Ty, Depth + 1), L, AR->getNoWrapFlags());
+            getExtendAddRecStart<SCEVZeroExtendExpr>(AR, Ty, this, Cache),
+            getZeroExtendExprCached(Step, Ty, Cache), L, AR->getNoWrapFlags());
       }
     }
 
@@ -1717,8 +1718,8 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
       // commute the zero extension with the addition operation.
       SmallVector<const SCEV *, 4> Ops;
       for (const auto *Op : SA->operands())
-        Ops.push_back(getZeroExtendExpr(Op, Ty, Depth + 1));
-      return getAddExpr(Ops, SCEV::FlagNUW, Depth + 1);
+        Ops.push_back(getZeroExtendExprCached(Op, Ty, Cache));
+      return getAddExpr(Ops, SCEV::FlagNUW);
     }
   }
 
@@ -1731,8 +1732,31 @@ ScalarEvolution::getZeroExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
   return S;
 }
 
-const SCEV *
-ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
+const SCEV *ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty) {
+  // Use the local cache to prevent exponential behavior of
+  // getSignExtendExprImpl.
+  ExtendCacheTy Cache;
+  return getSignExtendExprCached(Op, Ty, Cache);
+}
+
+/// Query \p Cache before calling getSignExtendExprImpl. If there is no
+/// related entry in the \p Cache, call getSignExtendExprImpl and save
+/// the result in the \p Cache.
+const SCEV *ScalarEvolution::getSignExtendExprCached(const SCEV *Op, Type *Ty,
+                                                     ExtendCacheTy &Cache) {
+  auto It = Cache.find({Op, Ty});
+  if (It != Cache.end())
+    return It->second;
+  const SCEV *SExt = getSignExtendExprImpl(Op, Ty, Cache);
+  auto InsertResult = Cache.insert({{Op, Ty}, SExt});
+  assert(InsertResult.second && "Expect the key was not in the cache");
+  (void)InsertResult;
+  return SExt;
+}
+
+/// The real implementation of getSignExtendExpr.
+const SCEV *ScalarEvolution::getSignExtendExprImpl(const SCEV *Op, Type *Ty,
+                                                   ExtendCacheTy &Cache) {
   assert(getTypeSizeInBits(Op->getType()) < getTypeSizeInBits(Ty) &&
          "This is not an extending conversion!");
   assert(isSCEVable(Ty) &&
@@ -1742,15 +1766,15 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
   // Fold if the operand is constant.
   if (const SCEVConstant *SC = dyn_cast<SCEVConstant>(Op))
     return getConstant(
-      cast<ConstantInt>(ConstantExpr::getSExt(SC->getValue(), Ty)));
+        cast<ConstantInt>(ConstantExpr::getSExt(SC->getValue(), Ty)));
 
   // sext(sext(x)) --> sext(x)
   if (const SCEVSignExtendExpr *SS = dyn_cast<SCEVSignExtendExpr>(Op))
-    return getSignExtendExpr(SS->getOperand(), Ty, Depth + 1);
+    return getSignExtendExprCached(SS->getOperand(), Ty, Cache);
 
   // sext(zext(x)) --> zext(x)
   if (const SCEVZeroExtendExpr *SZ = dyn_cast<SCEVZeroExtendExpr>(Op))
-    return getZeroExtendExpr(SZ->getOperand(), Ty, Depth + 1);
+    return getZeroExtendExpr(SZ->getOperand(), Ty);
 
   // Before doing any expensive analysis, check to see if we've already
   // computed a SCEV for this Op and Ty.
@@ -1760,13 +1784,6 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
   ID.AddPointer(Ty);
   void *IP = nullptr;
   if (const SCEV *S = UniqueSCEVs.FindNodeOrInsertPos(ID, IP)) return S;
-  // Limit recursion depth.
-  if (Depth > MaxExtDepth) {
-    SCEV *S = new (SCEVAllocator) SCEVSignExtendExpr(ID.Intern(SCEVAllocator),
-                                                     Op, Ty);
-    UniqueSCEVs.InsertNode(S, IP);
-    return S;
-  }
 
   // sext(trunc(x)) --> sext(x) or x or trunc(x)
   if (const SCEVTruncateExpr *ST = dyn_cast<SCEVTruncateExpr>(Op)) {
@@ -1792,9 +1809,8 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
           const APInt &C2 = SC2->getAPInt();
           if (C1.isStrictlyPositive() && C2.isStrictlyPositive() &&
               C2.ugt(C1) && C2.isPowerOf2())
-            return getAddExpr(getSignExtendExpr(SC1, Ty, Depth + 1),
-                              getSignExtendExpr(SMul, Ty, Depth + 1),
-                              SCEV::FlagAnyWrap, Depth + 1);
+            return getAddExpr(getSignExtendExprCached(SC1, Ty, Cache),
+                              getSignExtendExprCached(SMul, Ty, Cache));
         }
       }
     }
@@ -1805,8 +1821,8 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
       // commute the sign extension with the addition operation.
       SmallVector<const SCEV *, 4> Ops;
       for (const auto *Op : SA->operands())
-        Ops.push_back(getSignExtendExpr(Op, Ty, Depth + 1));
-      return getAddExpr(Ops, SCEV::FlagNSW, Depth + 1);
+        Ops.push_back(getSignExtendExprCached(Op, Ty, Cache));
+      return getAddExpr(Ops, SCEV::FlagNSW);
     }
   }
   // If the input value is a chrec scev, and we can prove that the value
@@ -1829,8 +1845,8 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
       // we don't need to do any further analysis.
       if (AR->hasNoSignedWrap())
         return getAddRecExpr(
-            getExtendAddRecStart<SCEVSignExtendExpr>(AR, Ty, this, Depth + 1),
-            getSignExtendExpr(Step, Ty, Depth + 1), L, SCEV::FlagNSW);
+            getExtendAddRecStart<SCEVSignExtendExpr>(AR, Ty, this, Cache),
+            getSignExtendExprCached(Step, Ty, Cache), L, SCEV::FlagNSW);
 
       // Check whether the backedge-taken count is SCEVCouldNotCompute.
       // Note that this serves two purposes: It filters out loops that are
@@ -1854,29 +1870,22 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
         if (MaxBECount == RecastedMaxBECount) {
           Type *WideTy = IntegerType::get(getContext(), BitWidth * 2);
           // Check whether Start+Step*MaxBECount has no signed overflow.
-          const SCEV *SMul = getMulExpr(CastedMaxBECount, Step,
-                                        SCEV::FlagAnyWrap, Depth + 1);
-          const SCEV *SAdd = getSignExtendExpr(getAddExpr(Start, SMul,
-                                                          SCEV::FlagAnyWrap,
-                                                          Depth + 1),
-                                               WideTy, Depth + 1);
-          const SCEV *WideStart = getSignExtendExpr(Start, WideTy, Depth + 1);
+          const SCEV *SMul = getMulExpr(CastedMaxBECount, Step);
+          const SCEV *SAdd =
+              getSignExtendExprCached(getAddExpr(Start, SMul), WideTy, Cache);
+          const SCEV *WideStart = getSignExtendExprCached(Start, WideTy, Cache);
           const SCEV *WideMaxBECount =
-            getZeroExtendExpr(CastedMaxBECount, WideTy, Depth + 1);
-          const SCEV *OperandExtendedAdd =
-            getAddExpr(WideStart,
-                       getMulExpr(WideMaxBECount,
-                                  getSignExtendExpr(Step, WideTy, Depth + 1),
-                                  SCEV::FlagAnyWrap, Depth + 1),
-                       SCEV::FlagAnyWrap, Depth + 1);
+              getZeroExtendExpr(CastedMaxBECount, WideTy);
+          const SCEV *OperandExtendedAdd = getAddExpr(
+              WideStart, getMulExpr(WideMaxBECount, getSignExtendExprCached(
+                                                        Step, WideTy, Cache)));
           if (SAdd == OperandExtendedAdd) {
             // Cache knowledge of AR NSW, which is propagated to this AddRec.
             const_cast<SCEVAddRecExpr *>(AR)->setNoWrapFlags(SCEV::FlagNSW);
             // Return the expression with the addrec on the outside.
             return getAddRecExpr(
-                getExtendAddRecStart<SCEVSignExtendExpr>(AR, Ty, this,
-                                                         Depth + 1),
-                getSignExtendExpr(Step, Ty, Depth + 1), L,
+                getExtendAddRecStart<SCEVSignExtendExpr>(AR, Ty, this, Cache),
+                getSignExtendExprCached(Step, Ty, Cache), L,
                 AR->getNoWrapFlags());
           }
           // Similar to above, only this time treat the step value as unsigned.
@@ -1884,9 +1893,7 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
           OperandExtendedAdd =
             getAddExpr(WideStart,
                        getMulExpr(WideMaxBECount,
-                                  getZeroExtendExpr(Step, WideTy, Depth + 1),
-                                  SCEV::FlagAnyWrap, Depth + 1),
-                       SCEV::FlagAnyWrap, Depth + 1);
+                                  getZeroExtendExpr(Step, WideTy)));
           if (SAdd == OperandExtendedAdd) {
             // If AR wraps around then
             //
@@ -1900,10 +1907,8 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
 
             // Return the expression with the addrec on the outside.
             return getAddRecExpr(
-                getExtendAddRecStart<SCEVSignExtendExpr>(AR, Ty, this,
-                                                         Depth + 1),
-                getZeroExtendExpr(Step, Ty, Depth + 1), L,
-                AR->getNoWrapFlags());
+                getExtendAddRecStart<SCEVSignExtendExpr>(AR, Ty, this, Cache),
+                getZeroExtendExpr(Step, Ty), L, AR->getNoWrapFlags());
           }
         }
       }
@@ -1934,8 +1939,9 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
           // Cache knowledge of AR NSW, then propagate NSW to the wide AddRec.
           const_cast<SCEVAddRecExpr *>(AR)->setNoWrapFlags(SCEV::FlagNSW);
           return getAddRecExpr(
-              getExtendAddRecStart<SCEVSignExtendExpr>(AR, Ty, this, Depth + 1),
-              getSignExtendExpr(Step, Ty, Depth + 1), L, AR->getNoWrapFlags());
+              getExtendAddRecStart<SCEVSignExtendExpr>(AR, Ty, this, Cache),
+              getSignExtendExprCached(Step, Ty, Cache), L,
+              AR->getNoWrapFlags());
         }
       }
 
@@ -1949,26 +1955,25 @@ ScalarEvolution::getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth) {
         const APInt &C2 = SC2->getAPInt();
         if (C1.isStrictlyPositive() && C2.isStrictlyPositive() && C2.ugt(C1) &&
             C2.isPowerOf2()) {
-          Start = getSignExtendExpr(Start, Ty, Depth + 1);
+          Start = getSignExtendExprCached(Start, Ty, Cache);
           const SCEV *NewAR = getAddRecExpr(getZero(AR->getType()), Step, L,
                                             AR->getNoWrapFlags());
-          return getAddExpr(Start, getSignExtendExpr(NewAR, Ty, Depth + 1),
-                            SCEV::FlagAnyWrap, Depth + 1);
+          return getAddExpr(Start, getSignExtendExprCached(NewAR, Ty, Cache));
         }
       }
 
       if (proveNoWrapByVaryingStart<SCEVSignExtendExpr>(Start, Step, L)) {
         const_cast<SCEVAddRecExpr *>(AR)->setNoWrapFlags(SCEV::FlagNSW);
         return getAddRecExpr(
-            getExtendAddRecStart<SCEVSignExtendExpr>(AR, Ty, this, Depth + 1),
-            getSignExtendExpr(Step, Ty, Depth + 1), L, AR->getNoWrapFlags());
+            getExtendAddRecStart<SCEVSignExtendExpr>(AR, Ty, this, Cache),
+            getSignExtendExprCached(Step, Ty, Cache), L, AR->getNoWrapFlags());
       }
     }
 
   // If the input value is provably positive and we could not simplify
   // away the sext build a zext instead.
   if (isKnownNonNegative(Op))
-    return getZeroExtendExpr(Op, Ty, Depth + 1);
+    return getZeroExtendExpr(Op, Ty);
 
   // The cast wasn't folded; create an explicit cast node.
   // Recompute the insert position, as it may have been invalidated.
@@ -3740,7 +3745,7 @@ const SCEV *ScalarEvolution::getMinusSCEV(const SCEV *LHS, const SCEV *RHS,
   // makes it so that we cannot make much use of NUW.
   auto AddFlags = SCEV::FlagAnyWrap;
   const bool RHSIsNotMinSigned =
-      !getSignedRangeMin(RHS).isMinSignedValue();
+      !getSignedRange(RHS).getSignedMin().isMinSignedValue();
   if (maskFlags(Flags, SCEV::FlagNSW) == SCEV::FlagNSW) {
     // Let M be the minimum representable signed value. Then (-1)*RHS
     // signed-wraps if and only if RHS is M. That can happen even for
@@ -4753,9 +4758,9 @@ static Optional<ConstantRange> GetRangeFromMetadata(Value *V) {
 /// Determine the range for a particular SCEV.  If SignHint is
 /// HINT_RANGE_UNSIGNED (resp. HINT_RANGE_SIGNED) then getRange prefers ranges
 /// with a "cleaner" unsigned (resp. signed) representation.
-const ConstantRange &
-ScalarEvolution::getRangeRef(const SCEV *S,
-                             ScalarEvolution::RangeSignHint SignHint) {
+ConstantRange
+ScalarEvolution::getRange(const SCEV *S,
+                          ScalarEvolution::RangeSignHint SignHint) {
   DenseMap<const SCEV *, ConstantRange> &Cache =
       SignHint == ScalarEvolution::HINT_RANGE_UNSIGNED ? UnsignedRanges
                                                        : SignedRanges;
@@ -4786,54 +4791,54 @@ ScalarEvolution::getRangeRef(const SCEV *S,
   }
 
   if (const SCEVAddExpr *Add = dyn_cast<SCEVAddExpr>(S)) {
-    ConstantRange X = getRangeRef(Add->getOperand(0), SignHint);
+    ConstantRange X = getRange(Add->getOperand(0), SignHint);
     for (unsigned i = 1, e = Add->getNumOperands(); i != e; ++i)
-      X = X.add(getRangeRef(Add->getOperand(i), SignHint));
+      X = X.add(getRange(Add->getOperand(i), SignHint));
     return setRange(Add, SignHint, ConservativeResult.intersectWith(X));
   }
 
   if (const SCEVMulExpr *Mul = dyn_cast<SCEVMulExpr>(S)) {
-    ConstantRange X = getRangeRef(Mul->getOperand(0), SignHint);
+    ConstantRange X = getRange(Mul->getOperand(0), SignHint);
     for (unsigned i = 1, e = Mul->getNumOperands(); i != e; ++i)
-      X = X.multiply(getRangeRef(Mul->getOperand(i), SignHint));
+      X = X.multiply(getRange(Mul->getOperand(i), SignHint));
     return setRange(Mul, SignHint, ConservativeResult.intersectWith(X));
   }
 
   if (const SCEVSMaxExpr *SMax = dyn_cast<SCEVSMaxExpr>(S)) {
-    ConstantRange X = getRangeRef(SMax->getOperand(0), SignHint);
+    ConstantRange X = getRange(SMax->getOperand(0), SignHint);
     for (unsigned i = 1, e = SMax->getNumOperands(); i != e; ++i)
-      X = X.smax(getRangeRef(SMax->getOperand(i), SignHint));
+      X = X.smax(getRange(SMax->getOperand(i), SignHint));
     return setRange(SMax, SignHint, ConservativeResult.intersectWith(X));
   }
 
   if (const SCEVUMaxExpr *UMax = dyn_cast<SCEVUMaxExpr>(S)) {
-    ConstantRange X = getRangeRef(UMax->getOperand(0), SignHint);
+    ConstantRange X = getRange(UMax->getOperand(0), SignHint);
     for (unsigned i = 1, e = UMax->getNumOperands(); i != e; ++i)
-      X = X.umax(getRangeRef(UMax->getOperand(i), SignHint));
+      X = X.umax(getRange(UMax->getOperand(i), SignHint));
     return setRange(UMax, SignHint, ConservativeResult.intersectWith(X));
   }
 
   if (const SCEVUDivExpr *UDiv = dyn_cast<SCEVUDivExpr>(S)) {
-    ConstantRange X = getRangeRef(UDiv->getLHS(), SignHint);
-    ConstantRange Y = getRangeRef(UDiv->getRHS(), SignHint);
+    ConstantRange X = getRange(UDiv->getLHS(), SignHint);
+    ConstantRange Y = getRange(UDiv->getRHS(), SignHint);
     return setRange(UDiv, SignHint,
                     ConservativeResult.intersectWith(X.udiv(Y)));
   }
 
   if (const SCEVZeroExtendExpr *ZExt = dyn_cast<SCEVZeroExtendExpr>(S)) {
-    ConstantRange X = getRangeRef(ZExt->getOperand(), SignHint);
+    ConstantRange X = getRange(ZExt->getOperand(), SignHint);
     return setRange(ZExt, SignHint,
                     ConservativeResult.intersectWith(X.zeroExtend(BitWidth)));
   }
 
   if (const SCEVSignExtendExpr *SExt = dyn_cast<SCEVSignExtendExpr>(S)) {
-    ConstantRange X = getRangeRef(SExt->getOperand(), SignHint);
+    ConstantRange X = getRange(SExt->getOperand(), SignHint);
     return setRange(SExt, SignHint,
                     ConservativeResult.intersectWith(X.signExtend(BitWidth)));
   }
 
   if (const SCEVTruncateExpr *Trunc = dyn_cast<SCEVTruncateExpr>(S)) {
-    ConstantRange X = getRangeRef(Trunc->getOperand(), SignHint);
+    ConstantRange X = getRange(Trunc->getOperand(), SignHint);
     return setRange(Trunc, SignHint,
                     ConservativeResult.intersectWith(X.truncate(BitWidth)));
   }
@@ -5000,7 +5005,8 @@ ConstantRange ScalarEvolution::getRangeForAffineAR(const SCEV *Start,
          "Precondition!");
 
   MaxBECount = getNoopOrZeroExtend(MaxBECount, Start->getType());
-  APInt MaxBECountValue = getUnsignedRangeMax(MaxBECount);
+  ConstantRange MaxBECountRange = getUnsignedRange(MaxBECount);
+  APInt MaxBECountValue = MaxBECountRange.getUnsignedMax();
 
   // First, consider step signed.
   ConstantRange StartSRange = getSignedRange(Start);
@@ -5017,7 +5023,7 @@ ConstantRange ScalarEvolution::getRangeForAffineAR(const SCEV *Start,
 
   // Next, consider step unsigned.
   ConstantRange UR = getRangeForAffineARHelper(
-      getUnsignedRangeMax(Step), getUnsignedRange(Start),
+      getUnsignedRange(Step).getUnsignedMax(), getUnsignedRange(Start),
       MaxBECountValue, BitWidth, /* Signed = */ false);
 
   // Finally, intersect signed and unsigned ranges.
@@ -6367,7 +6373,7 @@ ScalarEvolution::ExitLimit ScalarEvolution::computeExitLimitFromCondImpl(
       // to not.
       if (isa<SCEVCouldNotCompute>(MaxBECount) &&
           !isa<SCEVCouldNotCompute>(BECount))
-        MaxBECount = getConstant(getUnsignedRangeMax(BECount));
+        MaxBECount = getConstant(getUnsignedRange(BECount).getUnsignedMax());
 
       return ExitLimit(BECount, MaxBECount, false,
                        {&EL0.Predicates, &EL1.Predicates});
@@ -7641,7 +7647,7 @@ ScalarEvolution::howFarToZero(const SCEV *V, const Loop *L, bool ControlsExit,
   // 1*N = -Start; -1*N = Start (mod 2^BW), so:
   //   N = Distance (as unsigned)
   if (StepC->getValue()->equalsInt(1) || StepC->getValue()->isAllOnesValue()) {
-    APInt MaxBECount = getUnsignedRangeMax(Distance);
+    APInt MaxBECount = getUnsignedRange(Distance).getUnsignedMax();
 
     // When a loop like "for (int i = 0; i != n; ++i) { /* body */ }" is rotated,
     // we end up with a loop whose backedge-taken count is n - 1.  Detect this
@@ -7674,7 +7680,7 @@ ScalarEvolution::howFarToZero(const SCEV *V, const Loop *L, bool ControlsExit,
     const SCEV *Max =
         Exact == getCouldNotCompute()
             ? Exact
-            : getConstant(getUnsignedRangeMax(Exact));
+            : getConstant(getUnsignedRange(Exact).getUnsignedMax());
     return ExitLimit(Exact, Max, false, Predicates);
   }
 
@@ -7683,7 +7689,7 @@ ScalarEvolution::howFarToZero(const SCEV *V, const Loop *L, bool ControlsExit,
                                                getNegativeSCEV(Start), *this);
   const SCEV *M = E == getCouldNotCompute()
                       ? E
-                      : getConstant(getUnsignedRangeMax(E));
+                      : getConstant(getUnsignedRange(E).getUnsignedMax());
   return ExitLimit(E, M, false, Predicates);
 }
 
@@ -7880,12 +7886,12 @@ bool ScalarEvolution::SimplifyICmpOperands(ICmpInst::Predicate &Pred,
   // adding or subtracting 1 from one of the operands.
   switch (Pred) {
   case ICmpInst::ICMP_SLE:
-    if (!getSignedRangeMax(RHS).isMaxSignedValue()) {
+    if (!getSignedRange(RHS).getSignedMax().isMaxSignedValue()) {
       RHS = getAddExpr(getConstant(RHS->getType(), 1, true), RHS,
                        SCEV::FlagNSW);
       Pred = ICmpInst::ICMP_SLT;
       Changed = true;
-    } else if (!getSignedRangeMin(LHS).isMinSignedValue()) {
+    } else if (!getSignedRange(LHS).getSignedMin().isMinSignedValue()) {
       LHS = getAddExpr(getConstant(RHS->getType(), (uint64_t)-1, true), LHS,
                        SCEV::FlagNSW);
       Pred = ICmpInst::ICMP_SLT;
@@ -7893,12 +7899,12 @@ bool ScalarEvolution::SimplifyICmpOperands(ICmpInst::Predicate &Pred,
     }
     break;
   case ICmpInst::ICMP_SGE:
-    if (!getSignedRangeMin(RHS).isMinSignedValue()) {
+    if (!getSignedRange(RHS).getSignedMin().isMinSignedValue()) {
       RHS = getAddExpr(getConstant(RHS->getType(), (uint64_t)-1, true), RHS,
                        SCEV::FlagNSW);
       Pred = ICmpInst::ICMP_SGT;
       Changed = true;
-    } else if (!getSignedRangeMax(LHS).isMaxSignedValue()) {
+    } else if (!getSignedRange(LHS).getSignedMax().isMaxSignedValue()) {
       LHS = getAddExpr(getConstant(RHS->getType(), 1, true), LHS,
                        SCEV::FlagNSW);
       Pred = ICmpInst::ICMP_SGT;
@@ -7906,23 +7912,23 @@ bool ScalarEvolution::SimplifyICmpOperands(ICmpInst::Predicate &Pred,
     }
     break;
   case ICmpInst::ICMP_ULE:
-    if (!getUnsignedRangeMax(RHS).isMaxValue()) {
+    if (!getUnsignedRange(RHS).getUnsignedMax().isMaxValue()) {
       RHS = getAddExpr(getConstant(RHS->getType(), 1, true), RHS,
                        SCEV::FlagNUW);
       Pred = ICmpInst::ICMP_ULT;
       Changed = true;
-    } else if (!getUnsignedRangeMin(LHS).isMinValue()) {
+    } else if (!getUnsignedRange(LHS).getUnsignedMin().isMinValue()) {
       LHS = getAddExpr(getConstant(RHS->getType(), (uint64_t)-1, true), LHS);
       Pred = ICmpInst::ICMP_ULT;
       Changed = true;
     }
     break;
   case ICmpInst::ICMP_UGE:
-    if (!getUnsignedRangeMin(RHS).isMinValue()) {
+    if (!getUnsignedRange(RHS).getUnsignedMin().isMinValue()) {
       RHS = getAddExpr(getConstant(RHS->getType(), (uint64_t)-1, true), RHS);
       Pred = ICmpInst::ICMP_UGT;
       Changed = true;
-    } else if (!getUnsignedRangeMax(LHS).isMaxValue()) {
+    } else if (!getUnsignedRange(LHS).getUnsignedMax().isMaxValue()) {
       LHS = getAddExpr(getConstant(RHS->getType(), 1, true), LHS,
                        SCEV::FlagNUW);
       Pred = ICmpInst::ICMP_UGT;
@@ -7956,19 +7962,19 @@ trivially_false:
 }
 
 bool ScalarEvolution::isKnownNegative(const SCEV *S) {
-  return getSignedRangeMax(S).isNegative();
+  return getSignedRange(S).getSignedMax().isNegative();
 }
 
 bool ScalarEvolution::isKnownPositive(const SCEV *S) {
-  return getSignedRangeMin(S).isStrictlyPositive();
+  return getSignedRange(S).getSignedMin().isStrictlyPositive();
 }
 
 bool ScalarEvolution::isKnownNonNegative(const SCEV *S) {
-  return !getSignedRangeMin(S).isNegative();
+  return !getSignedRange(S).getSignedMin().isNegative();
 }
 
 bool ScalarEvolution::isKnownNonPositive(const SCEV *S) {
-  return !getSignedRangeMax(S).isStrictlyPositive();
+  return !getSignedRange(S).getSignedMax().isStrictlyPositive();
 }
 
 bool ScalarEvolution::isKnownNonZero(const SCEV *S) {
@@ -8554,7 +8560,7 @@ bool ScalarEvolution::isImpliedCond(ICmpInst::Predicate Pred, const SCEV *LHS,
     // predicate we're interested in folding.
 
     APInt Min = ICmpInst::isSigned(Pred) ?
-        getSignedRangeMin(V) : getUnsignedRangeMin(V);
+        getSignedRange(V).getSignedMin() : getUnsignedRange(V).getUnsignedMin();
 
     if (Min == C->getAPInt()) {
       // Given (V >= Min && V != Min) we conclude V >= (Min + 1).
@@ -9109,17 +9115,19 @@ bool ScalarEvolution::doesIVOverflowOnLT(const SCEV *RHS, const SCEV *Stride,
   const SCEV *One = getOne(Stride->getType());
 
   if (IsSigned) {
-    APInt MaxRHS = getSignedRangeMax(RHS);
+    APInt MaxRHS = getSignedRange(RHS).getSignedMax();
     APInt MaxValue = APInt::getSignedMaxValue(BitWidth);
-    APInt MaxStrideMinusOne = getSignedRangeMax(getMinusSCEV(Stride, One));
+    APInt MaxStrideMinusOne = getSignedRange(getMinusSCEV(Stride, One))
+                                .getSignedMax();
 
     // SMaxRHS + SMaxStrideMinusOne > SMaxValue => overflow!
     return (std::move(MaxValue) - MaxStrideMinusOne).slt(MaxRHS);
   }
 
-  APInt MaxRHS = getUnsignedRangeMax(RHS);
+  APInt MaxRHS = getUnsignedRange(RHS).getUnsignedMax();
   APInt MaxValue = APInt::getMaxValue(BitWidth);
-  APInt MaxStrideMinusOne = getUnsignedRangeMax(getMinusSCEV(Stride, One));
+  APInt MaxStrideMinusOne = getUnsignedRange(getMinusSCEV(Stride, One))
+                              .getUnsignedMax();
 
   // UMaxRHS + UMaxStrideMinusOne > UMaxValue => overflow!
   return (std::move(MaxValue) - MaxStrideMinusOne).ult(MaxRHS);
@@ -9133,17 +9141,19 @@ bool ScalarEvolution::doesIVOverflowOnGT(const SCEV *RHS, const SCEV *Stride,
   const SCEV *One = getOne(Stride->getType());
 
   if (IsSigned) {
-    APInt MinRHS = getSignedRangeMin(RHS);
+    APInt MinRHS = getSignedRange(RHS).getSignedMin();
     APInt MinValue = APInt::getSignedMinValue(BitWidth);
-    APInt MaxStrideMinusOne = getSignedRangeMax(getMinusSCEV(Stride, One));
+    APInt MaxStrideMinusOne = getSignedRange(getMinusSCEV(Stride, One))
+                               .getSignedMax();
 
     // SMinRHS - SMaxStrideMinusOne < SMinValue => overflow!
     return (std::move(MinValue) + MaxStrideMinusOne).sgt(MinRHS);
   }
 
-  APInt MinRHS = getUnsignedRangeMin(RHS);
+  APInt MinRHS = getUnsignedRange(RHS).getUnsignedMin();
   APInt MinValue = APInt::getMinValue(BitWidth);
-  APInt MaxStrideMinusOne = getUnsignedRangeMax(getMinusSCEV(Stride, One));
+  APInt MaxStrideMinusOne = getUnsignedRange(getMinusSCEV(Stride, One))
+                            .getUnsignedMax();
 
   // UMinRHS - UMaxStrideMinusOne < UMinValue => overflow!
   return (std::move(MinValue) + MaxStrideMinusOne).ugt(MinRHS);
@@ -9282,8 +9292,8 @@ ScalarEvolution::howManyLessThans(const SCEV *LHS, const SCEV *RHS,
   } else {
     // Calculate the maximum backedge count based on the range of values
     // permitted by Start, End, and Stride.
-    APInt MinStart = IsSigned ? getSignedRangeMin(Start)
-                              : getUnsignedRangeMin(Start);
+    APInt MinStart = IsSigned ? getSignedRange(Start).getSignedMin()
+                              : getUnsignedRange(Start).getUnsignedMin();
 
     unsigned BitWidth = getTypeSizeInBits(LHS->getType());
 
@@ -9291,8 +9301,8 @@ ScalarEvolution::howManyLessThans(const SCEV *LHS, const SCEV *RHS,
 
     if (PositiveStride)
       StrideForMaxBECount =
-        IsSigned ? getSignedRangeMin(Stride)
-                 : getUnsignedRangeMin(Stride);
+        IsSigned ? getSignedRange(Stride).getSignedMin()
+                 : getUnsignedRange(Stride).getUnsignedMin();
     else
       // Using a stride of 1 is safe when computing max backedge taken count for
       // a loop with unknown stride.
@@ -9306,8 +9316,8 @@ ScalarEvolution::howManyLessThans(const SCEV *LHS, const SCEV *RHS,
     // the case End = RHS. This is safe because in the other case (End - Start)
     // is zero, leading to a zero maximum backedge taken count.
     APInt MaxEnd =
-      IsSigned ? APIntOps::smin(getSignedRangeMax(RHS), Limit)
-               : APIntOps::umin(getUnsignedRangeMax(RHS), Limit);
+      IsSigned ? APIntOps::smin(getSignedRange(RHS).getSignedMax(), Limit)
+               : APIntOps::umin(getUnsignedRange(RHS).getUnsignedMax(), Limit);
 
     MaxBECount = computeBECount(getConstant(MaxEnd - MinStart),
                                 getConstant(StrideForMaxBECount), false);
@@ -9315,7 +9325,7 @@ ScalarEvolution::howManyLessThans(const SCEV *LHS, const SCEV *RHS,
 
   if (isa<SCEVCouldNotCompute>(MaxBECount) &&
       !isa<SCEVCouldNotCompute>(BECount))
-    MaxBECount = getConstant(getUnsignedRangeMax(BECount));
+    MaxBECount = getConstant(getUnsignedRange(BECount).getUnsignedMax());
 
   return ExitLimit(BECount, MaxBECount, MaxOrZero, Predicates);
 }
@@ -9366,11 +9376,11 @@ ScalarEvolution::howManyGreaterThans(const SCEV *LHS, const SCEV *RHS,
 
   const SCEV *BECount = computeBECount(getMinusSCEV(Start, End), Stride, false);
 
-  APInt MaxStart = IsSigned ? getSignedRangeMax(Start)
-                            : getUnsignedRangeMax(Start);
+  APInt MaxStart = IsSigned ? getSignedRange(Start).getSignedMax()
+                            : getUnsignedRange(Start).getUnsignedMax();
 
-  APInt MinStride = IsSigned ? getSignedRangeMin(Stride)
-                             : getUnsignedRangeMin(Stride);
+  APInt MinStride = IsSigned ? getSignedRange(Stride).getSignedMin()
+                             : getUnsignedRange(Stride).getUnsignedMin();
 
   unsigned BitWidth = getTypeSizeInBits(LHS->getType());
   APInt Limit = IsSigned ? APInt::getSignedMinValue(BitWidth) + (MinStride - 1)
@@ -9380,8 +9390,8 @@ ScalarEvolution::howManyGreaterThans(const SCEV *LHS, const SCEV *RHS,
   // the case End = RHS. This is safe because in the other case (Start - End)
   // is zero, leading to a zero maximum backedge taken count.
   APInt MinEnd =
-    IsSigned ? APIntOps::smax(getSignedRangeMin(RHS), Limit)
-             : APIntOps::umax(getUnsignedRangeMin(RHS), Limit);
+    IsSigned ? APIntOps::smax(getSignedRange(RHS).getSignedMin(), Limit)
+             : APIntOps::umax(getUnsignedRange(RHS).getUnsignedMin(), Limit);
 
 
   const SCEV *MaxBECount = getCouldNotCompute();

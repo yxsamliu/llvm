@@ -25,7 +25,6 @@ public:
   explicit TypeRecordMapping(BinaryStreamReader &Reader) : IO(Reader) {}
   explicit TypeRecordMapping(BinaryStreamWriter &Writer) : IO(Writer) {}
 
-  using TypeVisitorCallbacks::visitTypeBegin;
   Error visitTypeBegin(CVType &Record) override;
   Error visitTypeEnd(CVType &Record) override;
 

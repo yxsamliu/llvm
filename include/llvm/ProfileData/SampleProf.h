@@ -125,7 +125,7 @@ raw_ostream &operator<<(raw_ostream &OS, const LineLocation &Loc);
 /// will be a list of one or more functions.
 class SampleRecord {
 public:
-  using CallTargetMap = StringMap<uint64_t>;
+  typedef StringMap<uint64_t> CallTargetMap;
 
   SampleRecord() = default;
 
@@ -182,11 +182,10 @@ private:
 
 raw_ostream &operator<<(raw_ostream &OS, const SampleRecord &Sample);
 
+typedef std::map<LineLocation, SampleRecord> BodySampleMap;
 class FunctionSamples;
-
-using BodySampleMap = std::map<LineLocation, SampleRecord>;
-using FunctionSamplesMap = StringMap<FunctionSamples>;
-using CallsiteSampleMap = std::map<LineLocation, FunctionSamplesMap>;
+typedef StringMap<FunctionSamples> FunctionSamplesMap;
+typedef std::map<LineLocation, FunctionSamplesMap> CallsiteSampleMap;
 
 /// Representation of the samples collected for a function.
 ///
@@ -399,8 +398,8 @@ raw_ostream &operator<<(raw_ostream &OS, const FunctionSamples &FS);
 /// order of LocationT.
 template <class LocationT, class SampleT> class SampleSorter {
 public:
-  using SamplesWithLoc = std::pair<const LocationT, SampleT>;
-  using SamplesWithLocList = SmallVector<const SamplesWithLoc *, 20>;
+  typedef std::pair<const LocationT, SampleT> SamplesWithLoc;
+  typedef SmallVector<const SamplesWithLoc *, 20> SamplesWithLocList;
 
   SampleSorter(const std::map<LocationT, SampleT> &Samples) {
     for (const auto &I : Samples)

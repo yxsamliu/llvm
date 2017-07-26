@@ -504,11 +504,9 @@ void InstrProfRecord::mergeValueProfData(uint32_t ValueKind,
     SIPE.addError(instrprof_error::value_site_count_mismatch);
     return;
   }
-  if (!ThisNumValueSites)
-    return;
   std::vector<InstrProfValueSiteRecord> &ThisSiteRecords =
-      getOrCreateValueSitesForKind(ValueKind);
-  MutableArrayRef<InstrProfValueSiteRecord> OtherSiteRecords =
+      getValueSitesForKind(ValueKind);
+  std::vector<InstrProfValueSiteRecord> &OtherSiteRecords =
       Src.getValueSitesForKind(ValueKind);
   for (uint32_t I = 0; I < ThisNumValueSites; I++)
     ThisSiteRecords[I].merge(SIPE, OtherSiteRecords[I], Weight);
@@ -535,8 +533,11 @@ void InstrProfRecord::merge(InstrProfRecord &Other, uint64_t Weight) {
 }
 
 void InstrProfRecord::scaleValueProfData(uint32_t ValueKind, uint64_t Weight) {
-  for (auto &R : getValueSitesForKind(ValueKind))
-    R.scale(SIPE, Weight);
+  uint32_t ThisNumValueSites = getNumValueSites(ValueKind);
+  std::vector<InstrProfValueSiteRecord> &ThisSiteRecords =
+      getValueSitesForKind(ValueKind);
+  for (uint32_t I = 0; I < ThisNumValueSites; I++)
+    ThisSiteRecords[I].scale(SIPE, Weight);
 }
 
 void InstrProfRecord::scale(uint64_t Weight) {
@@ -582,7 +583,7 @@ void InstrProfRecord::addValueData(uint32_t ValueKind, uint32_t Site,
     VData[I].Value = remapValue(VData[I].Value, ValueKind, ValueMap);
   }
   std::vector<InstrProfValueSiteRecord> &ValueSites =
-      getOrCreateValueSitesForKind(ValueKind);
+      getValueSitesForKind(ValueKind);
   if (N == 0)
     ValueSites.emplace_back();
   else
@@ -641,9 +642,8 @@ static ValueProfRecordClosure InstrProfRecordClosure = {
 
 // Wrapper implementation using the closure mechanism.
 uint32_t ValueProfData::getSize(const InstrProfRecord &Record) {
-  auto Closure = InstrProfRecordClosure;
-  Closure.Record = &Record;
-  return getValueProfDataSize(&Closure);
+  InstrProfRecordClosure.Record = &Record;
+  return getValueProfDataSize(&InstrProfRecordClosure);
 }
 
 // Wrapper implementation using the closure mechanism.

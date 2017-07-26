@@ -1195,8 +1195,7 @@ RegisterInfoEmitter::runTargetDesc(raw_ostream &OS, CodeGenTarget &Target,
   OS << "\" };\n\n";
 
   // Emit SubRegIndex lane masks, including 0.
-  OS << "\nstatic const LaneBitmask SubRegIndexLaneMaskTable[] = {\n  "
-        "LaneBitmask::getAll(),\n";
+  OS << "\nstatic const LaneBitmask SubRegIndexLaneMaskTable[] = {\n  LaneBitmask::getAll(),\n";
   for (const auto &Idx : SubRegIndices) {
     printMask(OS << "  ", Idx.LaneMask);
     OS << ", // " << Idx.getName() << '\n';
@@ -1235,8 +1234,7 @@ RegisterInfoEmitter::runTargetDesc(raw_ostream &OS, CodeGenTarget &Target,
     BitVector MaskBV(RegisterClasses.size());
 
     for (const auto &RC : RegisterClasses) {
-      OS << "static const uint32_t " << RC.getName()
-         << "SubClassMask[] = {\n  ";
+      OS << "static const uint32_t " << RC.getName() << "SubClassMask[] = {\n  ";
       printBitVectorAsHex(OS, RC.getSubClasses(), 32);
 
       // Emit super-reg class masks for any relevant SubRegIndices that can

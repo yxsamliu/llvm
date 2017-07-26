@@ -1507,11 +1507,7 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
         }
 
         // Then handle certain instructions as single-LLVM-Instruction blocks.
-        // We cannot separate out GCrelocates to their own blocks since we need
-        // to keep track of gc-relocates for a particular gc-statepoint. This is
-        // done by SelectionDAGBuilder::LowerAsSTATEPOINT, called before
-        // visitGCRelocate.
-        if (isa<CallInst>(Inst) && !isStatepoint(Inst) && !isGCRelocate(Inst)) {
+        if (isa<CallInst>(Inst)) {
           OptimizationRemarkMissed R("sdagisel", "FastISelFailure",
                                      Inst->getDebugLoc(), LLVMBB);
 

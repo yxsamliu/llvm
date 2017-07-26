@@ -199,8 +199,13 @@ public:
     return Infos[Kind - FirstTargetFixupKind];
   }
 
-  bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
-                             const MCValue &Target) override {
+  /// processFixupValue - Target hook to adjust the literal value of a fixup
+  /// if necessary. IsResolved signals whether the caller believes a relocation
+  /// is needed; the target can modify the value. The default does nothing.
+  void processFixupValue(const MCAssembler &Asm, const MCAsmLayout &Layout,
+                         const MCFixup &Fixup, const MCFragment *DF,
+                         const MCValue &Target, uint64_t &Value,
+                         bool &IsResolved) override {
     MCFixupKind Kind = Fixup.getKind();
 
     switch((unsigned)Kind) {
@@ -296,7 +301,8 @@ public:
       case fixup_Hexagon_LD_PLT_B22_PCREL_X:
       case fixup_Hexagon_LD_PLT_B32_PCREL_X:
         // These relocations should always have a relocation recorded
-        return true;
+        IsResolved = false;
+        return;
 
       case fixup_Hexagon_B22_PCREL:
         //IsResolved = false;
@@ -313,7 +319,7 @@ public:
       case fixup_Hexagon_B7_PCREL:
       case fixup_Hexagon_B7_PCREL_X:
         if (DisableFixup)
-          return true;
+          IsResolved = false;
         break;
 
       case FK_Data_1:
@@ -322,9 +328,8 @@ public:
       case FK_PCRel_4:
       case fixup_Hexagon_32:
         // Leave these relocations alone as they are used for EH.
-        return false;
+        return;
     }
-    return false;
   }
 
   /// getFixupKindNumBytes - The number of bytes the fixup may change.
@@ -410,9 +415,9 @@ public:
   /// ApplyFixup - Apply the \arg Value for given \arg Fixup into the provided
   /// data fragment, at the offset specified by the fixup and following the
   /// fixup kind as appropriate.
-  void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                  const MCValue &Target, MutableArrayRef<char> Data,
-                  uint64_t FixupValue, bool IsPCRel) const override {
+  void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
+                  uint64_t FixupValue, bool IsPCRel,
+                  MCContext &Ctx) const override {
 
     // When FixupValue is 0 the relocation is external and there
     // is nothing for us to do.
@@ -427,8 +432,8 @@ public:
     // to a real offset before we can use it.
     uint32_t Offset = Fixup.getOffset();
     unsigned NumBytes = getFixupKindNumBytes(Kind);
-    assert(Offset + NumBytes <= Data.size() && "Invalid fixup offset!");
-    char *InstAddr = Data.data() + Offset;
+    assert(Offset + NumBytes <= DataSize && "Invalid fixup offset!");
+    char *InstAddr = Data + Offset;
 
     Value = adjustFixupValue(Kind, FixupValue);
     if(!Value)
@@ -512,7 +517,7 @@ public:
           dbgs() << "\tBValue=0x"; dbgs().write_hex(Value) <<
             ": AValue=0x"; dbgs().write_hex(FixupValue) <<
             ": Offset=" << Offset <<
-            ": Size=" << Data.size() <<
+            ": Size=" << DataSize <<
             ": OInst=0x"; dbgs().write_hex(OldData) <<
             ": Reloc=0x"; dbgs().write_hex(Reloc););
 

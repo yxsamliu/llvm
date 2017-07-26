@@ -14,9 +14,7 @@
 #ifndef LLVM_SUPPORT_ERRNO_H
 #define LLVM_SUPPORT_ERRNO_H
 
-#include <cerrno>
 #include <string>
-#include <type_traits>
 
 namespace llvm {
 namespace sys {
@@ -29,16 +27,6 @@ std::string StrError();
 
 /// Like the no-argument version above, but uses \p errnum instead of errno.
 std::string StrError(int errnum);
-
-template <typename FailT, typename Fun, typename... Args>
-inline auto RetryAfterSignal(const FailT &Fail, const Fun &F,
-                             const Args &... As) -> decltype(F(As...)) {
-  decltype(F(As...)) Res;
-  do
-    Res = F(As...);
-  while (Res == Fail && errno == EINTR);
-  return Res;
-}
 
 }  // namespace sys
 }  // namespace llvm

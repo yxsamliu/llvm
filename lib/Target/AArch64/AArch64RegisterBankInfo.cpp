@@ -469,6 +469,10 @@ AArch64RegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
         getCopyMapping(DstRB.getID(), SrcRB.getID(), Size),
         /*NumOperands*/ 2);
   }
+  case TargetOpcode::G_SEQUENCE:
+    // FIXME: support this, but the generic code is really not going to do
+    // anything sane.
+    return getInvalidInstructionMapping();
   default:
     break;
   }

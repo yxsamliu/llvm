@@ -805,7 +805,6 @@ void SubtargetEmitter::GenSchedClassTables(const CodeGenProcModel &ProcModel,
     return;
 
   std::vector<MCSchedClassDesc> &SCTab = SchedTables.ProcSchedClasses.back();
-  DEBUG(dbgs() << "\n+++ SCHED CLASSES (GenSchedClassTables) +++\n");
   for (const CodeGenSchedClass &SC : SchedModels.schedClasses()) {
     DEBUG(SC.dump(&SchedModels));
 

@@ -32,7 +32,7 @@
 //
 // ScheduleDAGInstrs *<Target>PassConfig::
 // createMachineScheduler(MachineSchedContext *C) {
-//   return new ScheduleDAGMILive(C, CustomStrategy(C));
+//   return new ScheduleDAGMI(C, CustomStrategy(C));
 // }
 //
 // The DAG builder can also be customized in a sense by adding DAG mutations
@@ -203,7 +203,7 @@ public:
                           MachineBasicBlock::iterator End,
                           unsigned NumRegionInstrs) {}
 
-  virtual void dumpPolicy() const {}
+  virtual void dumpPolicy() {}
 
   /// Check if pressure tracking is needed before building the DAG and
   /// initializing this strategy. Called after initPolicy.
@@ -555,7 +555,7 @@ public:
     return Queue.begin() + idx;
   }
 
-  void dump() const;
+  void dump();
 };
 
 /// Summarize the unscheduled region.
@@ -756,7 +756,7 @@ public:
   SUnit *pickOnlyChoice();
 
 #ifndef NDEBUG
-  void dumpScheduledState() const;
+  void dumpScheduledState();
 #endif
 };
 
@@ -890,7 +890,7 @@ public:
                   MachineBasicBlock::iterator End,
                   unsigned NumRegionInstrs) override;
 
-  void dumpPolicy() const override;
+  void dumpPolicy() override;
 
   bool shouldTrackPressure() const override {
     return RegionPolicy.ShouldTrackPressure;

@@ -84,7 +84,7 @@ private:
     return LambdaMaterializer<MaterializerFtor>(std::move(M));
   }
 
-  using BaseLayerModuleHandleT = typename BaseLayerT::ModuleHandleT;
+  using BaseLayerModuleSetHandleT = typename BaseLayerT::ModuleSetHandleT;
 
   // Provide type-erasure for the Modules and MemoryManagers.
   template <typename ResourceT>
@@ -139,14 +139,12 @@ private:
   struct LogicalDylib {
     using SymbolResolverFtor = std::function<JITSymbol(const std::string&)>;
 
-    using ModuleAdderFtor =
-      std::function<typename BaseLayerT::ModuleHandleT(
-                    BaseLayerT&,
-                    std::unique_ptr<Module>,
-                    std::unique_ptr<JITSymbolResolver>)>;
+    using ModuleAdderFtor = std::function<typename BaseLayerT::ModuleSetHandleT(
+        BaseLayerT &, std::unique_ptr<Module>,
+        std::unique_ptr<JITSymbolResolver>)>;
 
     struct SourceModuleEntry {
-      std::shared_ptr<Module> SourceMod;
+      std::unique_ptr<ResourceOwner<Module>> SourceMod;
       std::set<Function*> StubsToClone;
     };
 
@@ -154,7 +152,7 @@ private:
     using SourceModuleHandle = typename SourceModulesList::size_type;
 
     SourceModuleHandle
-    addSourceModule(std::shared_ptr<Module> M) {
+    addSourceModule(std::unique_ptr<ResourceOwner<Module>> M) {
       SourceModuleHandle H = SourceModules.size();
       SourceModules.push_back(SourceModuleEntry());
       SourceModules.back().SourceMod = std::move(M);
@@ -162,7 +160,7 @@ private:
     }
 
     Module& getSourceModule(SourceModuleHandle H) {
-      return *SourceModules[H].SourceMod;
+      return SourceModules[H].SourceMod->getResource();
     }
 
     std::set<Function*>& getStubsToClone(SourceModuleHandle H) {
@@ -181,22 +179,23 @@ private:
 
     void removeModulesFromBaseLayer(BaseLayerT &BaseLayer) {
       for (auto &BLH : BaseLayerHandles)
-        BaseLayer.removeModule(BLH);
+        BaseLayer.removeModuleSet(BLH);
     }
 
-    std::shared_ptr<JITSymbolResolver> ExternalSymbolResolver;
+    std::unique_ptr<JITSymbolResolver> ExternalSymbolResolver;
+    std::unique_ptr<ResourceOwner<RuntimeDyld::MemoryManager>> MemMgr;
     std::unique_ptr<IndirectStubsMgrT> StubsMgr;
     StaticGlobalRenamer StaticRenamer;
+    ModuleAdderFtor ModuleAdder;
     SourceModulesList SourceModules;
-    std::vector<BaseLayerModuleHandleT> BaseLayerHandles;
+    std::vector<BaseLayerModuleSetHandleT> BaseLayerHandles;
   };
 
   using LogicalDylibList = std::list<LogicalDylib>;
 
 public:
-
-  /// @brief Handle to loaded module.
-  using ModuleHandleT = typename LogicalDylibList::iterator;
+  /// @brief Handle to a set of loaded modules.
+  using ModuleSetHandleT = typename LogicalDylibList::iterator;
 
   /// @brief Module partitioning functor.
   using PartitioningFtor = std::function<std::set<Function*>(Function&)>;
@@ -217,34 +216,43 @@ public:
 
   ~CompileOnDemandLayer() {
     while (!LogicalDylibs.empty())
-      removeModule(LogicalDylibs.begin());
+      removeModuleSet(LogicalDylibs.begin());
   }
-
+  
   /// @brief Add a module to the compile-on-demand layer.
-  ModuleHandleT addModule(std::shared_ptr<Module> M,
-                          std::shared_ptr<JITSymbolResolver> Resolver) {
-
+  template <typename ModuleSetT, typename MemoryManagerPtrT,
+            typename SymbolResolverPtrT>
+  ModuleSetHandleT addModuleSet(ModuleSetT Ms,
+                                MemoryManagerPtrT MemMgr,
+                                SymbolResolverPtrT Resolver) {
     LogicalDylibs.push_back(LogicalDylib());
     auto &LD = LogicalDylibs.back();
     LD.ExternalSymbolResolver = std::move(Resolver);
     LD.StubsMgr = CreateIndirectStubsManager();
 
+    auto &MemMgrRef = *MemMgr;
+    LD.MemMgr = wrapOwnership<RuntimeDyld::MemoryManager>(std::move(MemMgr));
+
+    LD.ModuleAdder =
+      [&MemMgrRef](BaseLayerT &B, std::unique_ptr<Module> M,
+                   std::unique_ptr<JITSymbolResolver> R) {
+        std::vector<std::unique_ptr<Module>> Ms;
+        Ms.push_back(std::move(M));
+        return B.addModuleSet(std::move(Ms), &MemMgrRef, std::move(R));
+      };
+
     // Process each of the modules in this module set.
-    addLogicalModule(LD, std::move(M));
+    for (auto &M : Ms)
+      addLogicalModule(LogicalDylibs.back(), std::move(M));
 
     return std::prev(LogicalDylibs.end());
-  }
-
-  /// @brief Add extra modules to an existing logical module.
-  void addExtraModule(ModuleHandleT H, std::shared_ptr<Module> M) {
-    addLogicalModule(*H, std::move(M));
   }
 
   /// @brief Remove the module represented by the given handle.
   ///
   ///   This will remove all modules in the layers below that were derived from
   /// the module represented by H.
-  void removeModule(ModuleHandleT H) {
+  void removeModuleSet(ModuleSetHandleT H) {
     H->removeModulesFromBaseLayer(BaseLayer);
     LogicalDylibs.erase(H);
   }
@@ -266,7 +274,7 @@ public:
 
   /// @brief Get the address of a symbol provided by this layer, or some layer
   ///        below this one.
-  JITSymbol findSymbolIn(ModuleHandleT H, const std::string &Name,
+  JITSymbol findSymbolIn(ModuleSetHandleT H, const std::string &Name,
                          bool ExportedSymbolsOnly) {
     return H->findSymbol(BaseLayer, Name, ExportedSymbolsOnly);
   }
@@ -297,9 +305,8 @@ public:
   }
 
 private:
-
-  void addLogicalModule(LogicalDylib &LD, std::shared_ptr<Module> SrcMPtr) {
-
+  template <typename ModulePtrT>
+  void addLogicalModule(LogicalDylib &LD, ModulePtrT SrcMPtr) {
     // Rename all static functions / globals to $static.X :
     // This will unique the names across all modules in the logical dylib,
     // simplifying symbol lookup.
@@ -311,7 +318,7 @@ private:
 
     // Create a logical module handle for SrcM within the logical dylib.
     Module &SrcM = *SrcMPtr;
-    auto LMId = LD.addSourceModule(std::move(SrcMPtr));
+    auto LMId = LD.addSourceModule(wrapOwnership<Module>(std::move(SrcMPtr)));
 
     // Create stub functions.
     const DataLayout &DL = SrcM.getDataLayout();
@@ -437,7 +444,8 @@ private:
           return LD.ExternalSymbolResolver->findSymbol(Name);
         });
 
-    auto GVsH = BaseLayer.addModule(std::move(GVsM), std::move(GVsResolver));
+    auto GVsH = LD.ModuleAdder(BaseLayer, std::move(GVsM),
+                               std::move(GVsResolver));
     LD.BaseLayerHandles.push_back(GVsH);
   }
 
@@ -490,7 +498,7 @@ private:
   }
 
   template <typename PartitionT>
-  BaseLayerModuleHandleT
+  BaseLayerModuleSetHandleT
   emitPartition(LogicalDylib &LD,
                 typename LogicalDylib::SourceModuleHandle LMId,
                 const PartitionT &Part) {
@@ -563,7 +571,7 @@ private:
           return LD.ExternalSymbolResolver->findSymbol(Name);
         });
 
-    return BaseLayer.addModule(std::move(M), std::move(Resolver));
+    return LD.ModuleAdder(BaseLayer, std::move(M), std::move(Resolver));
   }
 
   BaseLayerT &BaseLayer;

@@ -242,11 +242,6 @@ static cl::opt<bool> PassRemarksWithHotness(
     cl::desc("With PGO, include profile count in optimization remarks"),
     cl::Hidden);
 
-static cl::opt<unsigned> PassRemarksHotnessThreshold(
-    "pass-remarks-hotness-threshold",
-    cl::desc("Minimum profile count required for an optimization remark to be output"),
-    cl::Hidden);
-
 static cl::opt<std::string>
     RemarksFilename("pass-remarks-output",
                     cl::desc("YAML output filename for pass remarks"),
@@ -425,10 +420,7 @@ int main(int argc, char **argv) {
     Context.enableDebugTypeODRUniquing();
 
   if (PassRemarksWithHotness)
-    Context.setDiagnosticsHotnessRequested(true);
-
-  if (PassRemarksHotnessThreshold)
-    Context.setDiagnosticsHotnessThreshold(PassRemarksHotnessThreshold);
+    Context.setDiagnosticHotnessRequested(true);
 
   std::unique_ptr<tool_output_file> YamlFile;
   if (RemarksFilename != "") {

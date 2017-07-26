@@ -329,9 +329,6 @@ namespace llvm {
     const std::string &getName() const { return Name; }
     std::string getQualifiedName() const;
     ArrayRef<MVT::SimpleValueType> getValueTypes() const {return VTs;}
-    bool hasValueType(MVT::SimpleValueType VT) const {
-      return std::find(VTs.begin(), VTs.end(), VT) != VTs.end();
-    }
     unsigned getNumValueTypes() const { return VTs.size(); }
 
     MVT::SimpleValueType getValueTypeNum(unsigned VTNum) const {
@@ -363,18 +360,6 @@ namespace llvm {
       return SubClassWithSubReg.lookup(SubIdx);
     }
 
-    /// Find largest subclass where all registers have SubIdx subregisters in
-    /// SubRegClass and the largest subregister class that contains those
-    /// subregisters without (as far as possible) also containing additional registers.
-    ///
-    /// This can be used to find a suitable pair of classes for subregister copies.
-    /// \return std::pair<SubClass, SubRegClass> where SubClass is a SubClass is
-    /// a class where every register has SubIdx and SubRegClass is a class where
-    /// every register is covered by the SubIdx subregister of SubClass.
-    Optional<std::pair<CodeGenRegisterClass *, CodeGenRegisterClass *>>
-    getMatchingSubClassWithSubRegs(CodeGenRegBank &RegBank,
-                                   const CodeGenSubRegIndex *SubIdx) const;
-
     void setSubClassWithSubReg(const CodeGenSubRegIndex *SubIdx,
                                CodeGenRegisterClass *SubRC) {
       SubClassWithSubReg[SubIdx] = SubRC;
@@ -385,7 +370,7 @@ namespace llvm {
     void getSuperRegClasses(const CodeGenSubRegIndex *SubIdx,
                             BitVector &Out) const;
 
-    // addSuperRegClass - Add a class containing only SubIdx super-registers.
+    // addSuperRegClass - Add a class containing only SudIdx super-registers.
     void addSuperRegClass(CodeGenSubRegIndex *SubIdx,
                           CodeGenRegisterClass *SuperRC) {
       SuperRegClasses[SubIdx].insert(SuperRC);

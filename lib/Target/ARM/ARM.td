@@ -100,8 +100,7 @@ def FeatureRAS : SubtargetFeature<"ras", "HasRAS", "true",
                 "Enable Reliability, Availability and Serviceability extensions">;
 def FeatureFPAO : SubtargetFeature<"fpao", "HasFPAO", "true",
                 "Enable fast computation of positive address offsets">;
-def FeatureFuseAES : SubtargetFeature<"fuse-aes", "HasFuseAES", "true",
-                                      "CPU fuses AES crypto operations">;
+
 
 // Cyclone has preferred instructions for zeroing VFP registers, which can
 // execute in 0 cycles.
@@ -222,13 +221,6 @@ def FeatureAvoidMOVsShOp : SubtargetFeature<"avoid-movs-shop",
 def FeatureHasRetAddrStack : SubtargetFeature<"ret-addr-stack", "HasRetAddrStack", "true",
                                      "Has return address stack">;
 
-// Some processors have no branch predictor, which changes the expected cost of
-// taking a branch which affects the choice of whether to use predicated
-// instructions.
-def FeatureHasNoBranchPredictor : SubtargetFeature<"no-branch-predictor",
-                                                   "HasBranchPredictor", "false",
-                                                   "Has no branch predictor">;
-
 /// DSP extension.
 def FeatureDSP : SubtargetFeature<"dsp", "HasDSP", "true",
                               "Supports DSP instructions in ARM and/or Thumb2">;
@@ -268,10 +260,6 @@ def FeatureStrictAlign : SubtargetFeature<"strict-align",
 def FeatureLongCalls : SubtargetFeature<"long-calls", "GenLongCalls", "true",
                                         "Generate calls via indirect call "
                                         "instructions">;
-
-def FeatureExecuteOnly
-    : SubtargetFeature<"execute-only", "GenExecuteOnly", "true",
-                       "Enable the generation of execute only code.">;
 
 def FeatureReserveR9 : SubtargetFeature<"reserve-r9", "ReserveR9", "true",
                                         "Reserve R9, making it unavailable as "
@@ -551,7 +539,7 @@ def ARMv7s   : Architecture<"armv7s",      "ARMv7a",   [ARMv7a]>;
 //
 
 // Dummy CPU, used to target architectures
-def : ProcessorModel<"generic",     CortexA8Model,      []>;
+def : ProcNoItin<"generic",                             []>;
 
 def : ProcNoItin<"arm8",                                [ARMv4]>;
 def : ProcNoItin<"arm810",                              [ARMv4]>;
@@ -767,19 +755,13 @@ def : ProcessorModel<"cortex-r8",   CortexA8Model,      [ARMv7r,
                                                          FeatureHasSlowFPVMLx,
                                                          FeatureAvoidPartialCPSR]>;
 
-def : ProcessorModel<"cortex-m3", CortexM3Model,        [ARMv7m,
-                                                         ProcM3,
-                                                         FeatureHasNoBranchPredictor]>;
+def : ProcNoItin<"cortex-m3",                           [ARMv7m, ProcM3]>;
+def : ProcNoItin<"sc300",                               [ARMv7m, ProcM3]>;
 
-def : ProcessorModel<"sc300",     CortexM3Model,        [ARMv7m,
-                                                         ProcM3,
-                                                         FeatureHasNoBranchPredictor]>;
-
-def : ProcessorModel<"cortex-m4", CortexM3Model,        [ARMv7em,
+def : ProcNoItin<"cortex-m4",                           [ARMv7em,
                                                          FeatureVFP4,
                                                          FeatureVFPOnlySP,
-                                                         FeatureD16,
-                                                         FeatureHasNoBranchPredictor]>;
+                                                         FeatureD16]>;
 
 def : ProcNoItin<"cortex-m7",                           [ARMv7em,
                                                          FeatureFPARMv8,
@@ -788,12 +770,11 @@ def : ProcNoItin<"cortex-m7",                           [ARMv7em,
 def : ProcNoItin<"cortex-m23",                          [ARMv8mBaseline,
                                                          FeatureNoMovt]>;
 
-def : ProcessorModel<"cortex-m33", CortexM3Model,       [ARMv8mMainline,
+def : ProcNoItin<"cortex-m33",                          [ARMv8mMainline,
                                                          FeatureDSP,
                                                          FeatureFPARMv8,
                                                          FeatureD16,
-                                                         FeatureVFPOnlySP,
-                                                         FeatureHasNoBranchPredictor]>;
+                                                         FeatureVFPOnlySP]>;
 
 def : ProcNoItin<"cortex-a32",                           [ARMv8a,
                                                          FeatureHWDivThumb,

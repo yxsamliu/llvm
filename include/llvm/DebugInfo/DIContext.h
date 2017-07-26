@@ -57,7 +57,7 @@ struct DILineInfo {
   }
 };
 
-using DILineInfoTable = SmallVector<std::pair<uint64_t, DILineInfo>, 16>;
+typedef SmallVector<std::pair<uint64_t, DILineInfo>, 16> DILineInfoTable;
 
 /// DIInliningInfo - a format-neutral container for inlined code description.
 class DIInliningInfo {
@@ -102,7 +102,7 @@ enum class DINameKind { None, ShortName, LinkageName };
 /// should be filled with data.
 struct DILineInfoSpecifier {
   enum class FileLineInfoKind { None, Default, AbsoluteFilePath };
-  using FunctionNameKind = DINameKind;
+  typedef DINameKind FunctionNameKind;
 
   FileLineInfoKind FLIKind;
   FunctionNameKind FNKind;
@@ -174,7 +174,6 @@ public:
     // No verifier? Just say things went well.
     return true;
   }
-
   virtual DILineInfo getLineInfoForAddress(uint64_t Address,
       DILineInfoSpecifier Specifier = DILineInfoSpecifier()) = 0;
   virtual DILineInfoTable getLineInfoForAddressRange(uint64_t Address,

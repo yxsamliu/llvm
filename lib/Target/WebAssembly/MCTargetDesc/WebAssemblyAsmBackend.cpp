@@ -37,9 +37,8 @@ public:
       : MCAsmBackend(), Is64Bit(Is64Bit) {}
   ~WebAssemblyAsmBackendELF() override {}
 
-  void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                  const MCValue &Target, MutableArrayRef<char> Data,
-                  uint64_t Value, bool IsPCRel) const override;
+  void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
+                  uint64_t Value, bool IsPCRel, MCContext &Ctx) const override;
 
   MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override;
 
@@ -78,9 +77,8 @@ public:
 
   const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override;
 
-  void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                  const MCValue &Target, MutableArrayRef<char> Data,
-                  uint64_t Value, bool IsPCRel) const override;
+  void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
+                  uint64_t Value, bool IsPCRel, MCContext &Ctx) const override;
 
   MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override;
 
@@ -107,11 +105,9 @@ bool WebAssemblyAsmBackendELF::writeNopData(uint64_t Count,
   return true;
 }
 
-void WebAssemblyAsmBackendELF::applyFixup(const MCAssembler &Asm,
-                                          const MCFixup &Fixup,
-                                          const MCValue &Target,
-                                          MutableArrayRef<char> Data,
-                                          uint64_t Value, bool IsPCRel) const {
+void WebAssemblyAsmBackendELF::applyFixup(const MCFixup &Fixup, char *Data,
+                                          unsigned DataSize, uint64_t Value,
+                                          bool IsPCRel, MCContext &Ctx) const {
   const MCFixupKindInfo &Info = getFixupKindInfo(Fixup.getKind());
   assert(Info.Flags == 0 && "WebAssembly does not use MCFixupKindInfo flags");
 
@@ -123,7 +119,7 @@ void WebAssemblyAsmBackendELF::applyFixup(const MCAssembler &Asm,
   Value <<= Info.TargetOffset;
 
   unsigned Offset = Fixup.getOffset();
-  assert(Offset + NumBytes <= Data.size() && "Invalid fixup offset!");
+  assert(Offset + NumBytes <= DataSize && "Invalid fixup offset!");
 
   // For each byte of the fragment that the fixup touches, mask in the
   // bits from the fixup value.
@@ -167,11 +163,9 @@ bool WebAssemblyAsmBackend::writeNopData(uint64_t Count,
   return true;
 }
 
-void WebAssemblyAsmBackend::applyFixup(const MCAssembler &Asm,
-                                       const MCFixup &Fixup,
-                                       const MCValue &Target,
-                                       MutableArrayRef<char> Data,
-                                       uint64_t Value, bool IsPCRel) const {
+void WebAssemblyAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
+                                       unsigned DataSize, uint64_t Value,
+                                       bool IsPCRel, MCContext &Ctx) const {
   const MCFixupKindInfo &Info = getFixupKindInfo(Fixup.getKind());
   assert(Info.Flags == 0 && "WebAssembly does not use MCFixupKindInfo flags");
 
@@ -183,7 +177,7 @@ void WebAssemblyAsmBackend::applyFixup(const MCAssembler &Asm,
   Value <<= Info.TargetOffset;
 
   unsigned Offset = Fixup.getOffset();
-  assert(Offset + NumBytes <= Data.size() && "Invalid fixup offset!");
+  assert(Offset + NumBytes <= DataSize && "Invalid fixup offset!");
 
   // For each byte of the fragment that the fixup touches, mask in the
   // bits from the fixup value.

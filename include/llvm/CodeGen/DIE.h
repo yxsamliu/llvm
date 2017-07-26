@@ -121,8 +121,8 @@ public:
   /// Print the abbreviation using the specified asm printer.
   void Emit(const AsmPrinter *AP) const;
 
-  void print(raw_ostream &O) const;
-  void dump() const;
+  void print(raw_ostream &O);
+  void dump();
 };
 
 //===--------------------------------------------------------------------===//
@@ -780,7 +780,7 @@ public:
   DIEValue findAttribute(dwarf::Attribute Attribute) const;
 
   void print(raw_ostream &O, unsigned IndentCount = 0) const;
-  void dump() const;
+  void dump();
 };
 
 //===--------------------------------------------------------------------===//

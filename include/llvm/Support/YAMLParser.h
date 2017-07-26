@@ -1,4 +1,4 @@
-//===- YAMLParser.h - Simple YAML parser ------------------------*- C++ -*-===//
+//===--- YAMLParser.h - Simple YAML parser --------------------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -41,25 +41,20 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/SMLoc.h"
-#include <cassert>
-#include <cstddef>
-#include <iterator>
 #include <map>
-#include <memory>
-#include <string>
 #include <system_error>
+#include <utility>
 
 namespace llvm {
-
 class MemoryBufferRef;
 class SourceMgr;
-class raw_ostream;
 class Twine;
+class raw_ostream;
 
 namespace yaml {
 
-class Document;
 class document_iterator;
+class Document;
 class Node;
 class Scanner;
 struct Token;
@@ -92,7 +87,6 @@ public:
   document_iterator end();
   void skip();
   bool failed();
-
   bool validate() {
     skip();
     return !failed();
@@ -101,10 +95,10 @@ public:
   void printError(Node *N, const Twine &Msg);
 
 private:
-  friend class Document;
-
   std::unique_ptr<Scanner> scanner;
   std::unique_ptr<Document> CurrentDoc;
+
+  friend class Document;
 };
 
 /// \brief Abstract base class for all Nodes.
@@ -124,18 +118,6 @@ public:
 
   Node(unsigned int Type, std::unique_ptr<Document> &, StringRef Anchor,
        StringRef Tag);
-
-  void *operator new(size_t Size, BumpPtrAllocator &Alloc,
-                     size_t Alignment = 16) noexcept {
-    return Alloc.Allocate(Size, Alignment);
-  }
-
-  void operator delete(void *Ptr, BumpPtrAllocator &Alloc,
-                       size_t Size) noexcept {
-    Alloc.Deallocate(Ptr, Size);
-  }
-
-  void operator delete(void *) noexcept = delete;
 
   /// \brief Get the value of the anchor attached to this node. If it does not
   ///        have one, getAnchor().size() will be 0.
@@ -164,9 +146,21 @@ public:
 
   unsigned int getType() const { return TypeID; }
 
+  void *operator new(size_t Size, BumpPtrAllocator &Alloc,
+                     size_t Alignment = 16) noexcept {
+    return Alloc.Allocate(Size, Alignment);
+  }
+
+  void operator delete(void *Ptr, BumpPtrAllocator &Alloc,
+                       size_t Size) noexcept {
+    Alloc.Deallocate(Ptr, Size);
+  }
+
 protected:
   std::unique_ptr<Document> &Doc;
   SMRange SourceRange;
+
+  void operator delete(void *) noexcept = delete;
 
   ~Node() = default;
 
@@ -188,7 +182,7 @@ public:
   NullNode(std::unique_ptr<Document> &D)
       : Node(NK_Null, D, StringRef(), StringRef()) {}
 
-  static bool classof(const Node *N) { return N->getType() == NK_Null; }
+  static inline bool classof(const Node *N) { return N->getType() == NK_Null; }
 };
 
 /// \brief A scalar node is an opaque datum that can be presented as a
@@ -220,7 +214,7 @@ public:
   ///        This happens with escaped characters and multi-line literals.
   StringRef getValue(SmallVectorImpl<char> &Storage) const;
 
-  static bool classof(const Node *N) {
+  static inline bool classof(const Node *N) {
     return N->getType() == NK_Scalar;
   }
 
@@ -254,7 +248,7 @@ public:
   /// \brief Gets the value of this node as a StringRef.
   StringRef getValue() const { return Value; }
 
-  static bool classof(const Node *N) {
+  static inline bool classof(const Node *N) {
     return N->getType() == NK_BlockScalar;
   }
 
@@ -274,7 +268,8 @@ class KeyValueNode final : public Node {
 
 public:
   KeyValueNode(std::unique_ptr<Document> &D)
-      : Node(NK_KeyValue, D, StringRef(), StringRef()) {}
+      : Node(NK_KeyValue, D, StringRef(), StringRef()), Key(nullptr),
+        Value(nullptr) {}
 
   /// \brief Parse and return the key.
   ///
@@ -296,13 +291,13 @@ public:
       Val->skip();
   }
 
-  static bool classof(const Node *N) {
+  static inline bool classof(const Node *N) {
     return N->getType() == NK_KeyValue;
   }
 
 private:
-  Node *Key = nullptr;
-  Node *Value = nullptr;
+  Node *Key;
+  Node *Value;
 };
 
 /// \brief This is an iterator abstraction over YAML collections shared by both
@@ -314,7 +309,7 @@ template <class BaseT, class ValueT>
 class basic_collection_iterator
     : public std::iterator<std::input_iterator_tag, ValueT> {
 public:
-  basic_collection_iterator() = default;
+  basic_collection_iterator() : Base(nullptr) {}
   basic_collection_iterator(BaseT *B) : Base(B) {}
 
   ValueT *operator->() const {
@@ -363,7 +358,7 @@ public:
   }
 
 private:
-  BaseT *Base = nullptr;
+  BaseT *Base;
 };
 
 // The following two templates are used for both MappingNode and Sequence Node.
@@ -404,12 +399,11 @@ public:
 
   MappingNode(std::unique_ptr<Document> &D, StringRef Anchor, StringRef Tag,
               MappingType MT)
-      : Node(NK_Mapping, D, Anchor, Tag), Type(MT) {}
+      : Node(NK_Mapping, D, Anchor, Tag), Type(MT), IsAtBeginning(true),
+        IsAtEnd(false), CurrentEntry(nullptr) {}
 
   friend class basic_collection_iterator<MappingNode, KeyValueNode>;
-
-  using iterator = basic_collection_iterator<MappingNode, KeyValueNode>;
-
+  typedef basic_collection_iterator<MappingNode, KeyValueNode> iterator;
   template <class T> friend typename T::iterator yaml::begin(T &);
   template <class T> friend void yaml::skip(T &);
 
@@ -419,15 +413,15 @@ public:
 
   void skip() override { yaml::skip(*this); }
 
-  static bool classof(const Node *N) {
+  static inline bool classof(const Node *N) {
     return N->getType() == NK_Mapping;
   }
 
 private:
   MappingType Type;
-  bool IsAtBeginning = true;
-  bool IsAtEnd = false;
-  KeyValueNode *CurrentEntry = nullptr;
+  bool IsAtBeginning;
+  bool IsAtEnd;
+  KeyValueNode *CurrentEntry;
 
   void increment();
 };
@@ -459,12 +453,13 @@ public:
 
   SequenceNode(std::unique_ptr<Document> &D, StringRef Anchor, StringRef Tag,
                SequenceType ST)
-      : Node(NK_Sequence, D, Anchor, Tag), SeqType(ST) {}
+      : Node(NK_Sequence, D, Anchor, Tag), SeqType(ST), IsAtBeginning(true),
+        IsAtEnd(false),
+        WasPreviousTokenFlowEntry(true), // Start with an imaginary ','.
+        CurrentEntry(nullptr) {}
 
   friend class basic_collection_iterator<SequenceNode, Node>;
-
-  using iterator = basic_collection_iterator<SequenceNode, Node>;
-
+  typedef basic_collection_iterator<SequenceNode, Node> iterator;
   template <class T> friend typename T::iterator yaml::begin(T &);
   template <class T> friend void yaml::skip(T &);
 
@@ -476,16 +471,16 @@ public:
 
   void skip() override { yaml::skip(*this); }
 
-  static bool classof(const Node *N) {
+  static inline bool classof(const Node *N) {
     return N->getType() == NK_Sequence;
   }
 
 private:
   SequenceType SeqType;
-  bool IsAtBeginning = true;
-  bool IsAtEnd = false;
-  bool WasPreviousTokenFlowEntry = true; // Start with an imaginary ','.
-  Node *CurrentEntry = nullptr;
+  bool IsAtBeginning;
+  bool IsAtEnd;
+  bool WasPreviousTokenFlowEntry;
+  Node *CurrentEntry;
 };
 
 /// \brief Represents an alias to a Node with an anchor.
@@ -502,7 +497,7 @@ public:
   StringRef getName() const { return Name; }
   Node *getTarget();
 
-  static bool classof(const Node *N) { return N->getType() == NK_Alias; }
+  static inline bool classof(const Node *N) { return N->getType() == NK_Alias; }
 
 private:
   StringRef Name;
@@ -512,10 +507,10 @@ private:
 ///        node.
 class Document {
 public:
-  Document(Stream &ParentStream);
-
   /// \brief Root for parsing a node. Returns a single node.
   Node *parseBlockNode();
+
+  Document(Stream &ParentStream);
 
   /// \brief Finish parsing the current document and return true if there are
   ///        more. Return false otherwise.
@@ -569,7 +564,7 @@ private:
 /// \brief Iterator abstraction for Documents over a Stream.
 class document_iterator {
 public:
-  document_iterator() = default;
+  document_iterator() : Doc(nullptr) {}
   document_iterator(std::unique_ptr<Document> &D) : Doc(&D) {}
 
   bool operator==(const document_iterator &Other) {
@@ -598,11 +593,11 @@ public:
 private:
   bool isAtEnd() const { return !Doc || !*Doc; }
 
-  std::unique_ptr<Document> *Doc = nullptr;
+  std::unique_ptr<Document> *Doc;
 };
 
-} // end namespace yaml
+} // End namespace yaml.
 
-} // end namespace llvm
+} // End namespace llvm.
 
-#endif // LLVM_SUPPORT_YAMLPARSER_H
+#endif

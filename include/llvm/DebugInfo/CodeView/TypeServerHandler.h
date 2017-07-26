@@ -10,17 +10,16 @@
 #ifndef LLVM_DEBUGINFO_CODEVIEW_TYPESERVERHANDLER_H
 #define LLVM_DEBUGINFO_CODEVIEW_TYPESERVERHANDLER_H
 
+#include "llvm/DebugInfo/CodeView/TypeRecord.h"
 #include "llvm/Support/Error.h"
 
 namespace llvm {
 namespace codeview {
-
-class TypeServer2Record;
 class TypeVisitorCallbacks;
 
 class TypeServerHandler {
 public:
-  virtual ~TypeServerHandler() = default;
+  virtual ~TypeServerHandler() {}
 
   /// Handle a TypeServer record.  If the implementation returns true
   /// the record will not be processed by the top-level visitor.  If
@@ -31,8 +30,7 @@ public:
     return false;
   }
 };
+}
+}
 
-} // end namespace codeview
-} // end namespace llvm
-
-#endif // LLVM_DEBUGINFO_CODEVIEW_TYPESERVERHANDLER_H
+#endif

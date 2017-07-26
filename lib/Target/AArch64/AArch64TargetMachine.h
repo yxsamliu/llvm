@@ -36,7 +36,6 @@ public:
 
   ~AArch64TargetMachine() override;
   const AArch64Subtarget *getSubtargetImpl(const Function &F) const override;
-  const AArch64Subtarget *getSubtargetImpl() const = delete;
 
   // Pass Pipeline Configuration
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;

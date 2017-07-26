@@ -12,15 +12,15 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
+
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/MathExtras.h"
-#include <cstdint>
+
 #include <vector>
 
 namespace llvm {
 namespace msf {
-
 static const char Magic[] = {'M',  'i',  'c',    'r', 'o', 's',  'o',  'f',
                              't',  ' ',  'C',    '/', 'C', '+',  '+',  ' ',
                              'M',  'S',  'F',    ' ', '7', '.',  '0',  '0',
@@ -50,9 +50,8 @@ struct SuperBlock {
 };
 
 struct MSFLayout {
-  MSFLayout() = default;
-
-  const SuperBlock *SB = nullptr;
+  MSFLayout() : SB(nullptr) {}
+  const SuperBlock *SB;
   BitVector FreePageMap;
   ArrayRef<support::ulittle32_t> DirectoryBlocks;
   ArrayRef<support::ulittle32_t> StreamSizes;
@@ -91,16 +90,15 @@ inline uint32_t getFpmIntervalLength(const MSFLayout &L) {
 
 inline uint32_t getNumFpmIntervals(const MSFLayout &L) {
   uint32_t Length = getFpmIntervalLength(L);
-  return alignTo(L.SB->NumBlocks, Length) / Length;
+  return llvm::alignTo(L.SB->NumBlocks, Length) / Length;
 }
 
 inline uint32_t getFullFpmByteSize(const MSFLayout &L) {
-  return alignTo(L.SB->NumBlocks, 8) / 8;
+  return llvm::alignTo(L.SB->NumBlocks, 8) / 8;
 }
 
 Error validateSuperBlock(const SuperBlock &SB);
-
-} // end namespace msf
-} // end namespace llvm
+} // namespace msf
+} // namespace llvm
 
 #endif // LLVM_DEBUGINFO_MSF_MSFCOMMON_H

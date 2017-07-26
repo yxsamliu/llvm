@@ -100,6 +100,9 @@ namespace {
     void getAnalysisUsage(AnalysisUsage &AU) const override {
       MachineFunctionPass::getAnalysisUsage(AU);
     }
+
+  private:
+    void ChangeOpInto(MachineOperand &Dst, MachineOperand &Src);
   };
 }
 
@@ -129,9 +132,7 @@ bool HexagonPeephole::runOnMachineFunction(MachineFunction &MF) {
     PeepholeDoubleRegsMap.clear();
 
     // Traverse the basic block.
-    for (auto I = MBB->begin(), E = MBB->end(), NextI = I; I != E; I = NextI) {
-      NextI = std::next(I);
-      MachineInstr &MI = *I;
+    for (MachineInstr &MI : *MBB) {
       // Look for sign extends:
       // %vreg170<def> = SXTW %vreg166
       if (!DisableOptSZExt && MI.getOpcode() == Hexagon::A2_sxtw) {
@@ -279,13 +280,14 @@ bool HexagonPeephole::runOnMachineFunction(MachineFunction &MF) {
           if (NewOp) {
             unsigned PSrc = MI.getOperand(PR).getReg();
             if (unsigned POrig = PeepholeMap.lookup(PSrc)) {
-              BuildMI(*MBB, MI.getIterator(), MI.getDebugLoc(),
-                      QII->get(NewOp), MI.getOperand(0).getReg())
-                .addReg(POrig)
-                .add(MI.getOperand(S2))
-                .add(MI.getOperand(S1));
+              MI.getOperand(PR).setReg(POrig);
               MRI->clearKillFlags(POrig);
-              MI.eraseFromParent();
+              MI.setDesc(QII->get(NewOp));
+              // Swap operands S1 and S2.
+              MachineOperand Op1 = MI.getOperand(S1);
+              MachineOperand Op2 = MI.getOperand(S2);
+              ChangeOpInto(MI.getOperand(S1), Op2);
+              ChangeOpInto(MI.getOperand(S2), Op1);
             }
           } // if (NewOp)
         } // if (!Done)
@@ -295,6 +297,40 @@ bool HexagonPeephole::runOnMachineFunction(MachineFunction &MF) {
     } // Instruction
   } // Basic Block
   return true;
+}
+
+void HexagonPeephole::ChangeOpInto(MachineOperand &Dst, MachineOperand &Src) {
+  assert (&Dst != &Src && "Cannot duplicate into itself");
+  switch (Dst.getType()) {
+    case MachineOperand::MO_Register:
+      if (Src.isReg()) {
+        Dst.setReg(Src.getReg());
+        Dst.setSubReg(Src.getSubReg());
+        MRI->clearKillFlags(Src.getReg());
+      } else if (Src.isImm()) {
+        Dst.ChangeToImmediate(Src.getImm());
+      } else {
+        llvm_unreachable("Unexpected src operand type");
+      }
+      break;
+
+    case MachineOperand::MO_Immediate:
+      if (Src.isImm()) {
+        Dst.setImm(Src.getImm());
+      } else if (Src.isReg()) {
+        Dst.ChangeToRegister(Src.getReg(), Src.isDef(), Src.isImplicit(),
+                             false, Src.isDead(), Src.isUndef(),
+                             Src.isDebug());
+        Dst.setSubReg(Src.getSubReg());
+      } else {
+        llvm_unreachable("Unexpected src operand type");
+      }
+      break;
+
+    default:
+      llvm_unreachable("Unexpected dst operand type");
+      break;
+  }
 }
 
 FunctionPass *llvm::createHexagonPeephole() {

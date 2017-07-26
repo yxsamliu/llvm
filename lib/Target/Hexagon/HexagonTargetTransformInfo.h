@@ -46,8 +46,7 @@ public:
   TTI::PopcntSupportKind getPopcntSupport(unsigned IntTyWidthInBit) const;
 
   // The Hexagon target can unroll loops with run-time trip counts.
-  void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
-                               TTI::UnrollingPreferences &UP);
+  void getUnrollingPreferences(Loop *L, TTI::UnrollingPreferences &UP);
 
   // L1 cache prefetch.
   unsigned getPrefetchDistance() const;
@@ -62,10 +61,7 @@ public:
 
   /// @}
 
-  int getUserCost(const User *U, ArrayRef<const Value *> Operands);
-
-  // Hexagon specific decision to generate a lookup table.
-  bool shouldBuildLookupTables() const;
+  int getUserCost(const User *U);
 };
 
 } // end namespace llvm

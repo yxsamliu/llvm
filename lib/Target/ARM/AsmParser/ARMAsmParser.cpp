@@ -6860,17 +6860,6 @@ static unsigned getRealVLDOpcode(unsigned Opc, unsigned &Spacing) {
 bool ARMAsmParser::processInstruction(MCInst &Inst,
                                       const OperandVector &Operands,
                                       MCStreamer &Out) {
-  // Check if we have the wide qualifier, because if it's present we
-  // must avoid selecting a 16-bit thumb instruction.
-  bool HasWideQualifier = false;
-  for (auto &Op : Operands) {
-    ARMOperand &ARMOp = static_cast<ARMOperand&>(*Op);
-    if (ARMOp.isToken() && ARMOp.getToken() == ".w") {
-      HasWideQualifier = true;
-      break;
-    }
-  }
-
   switch (Inst.getOpcode()) {
   // Alias for alternate form of 'ldr{,b}t Rt, [Rn], #imm' instruction.
   case ARM::LDRT_POST:
@@ -6950,7 +6939,8 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
     // Select the narrow version if the immediate will fit.
     if (Inst.getOperand(1).getImm() > 0 &&
         Inst.getOperand(1).getImm() <= 0xff &&
-        !HasWideQualifier)
+        !(static_cast<ARMOperand &>(*Operands[2]).isToken() &&
+          static_cast<ARMOperand &>(*Operands[2]).getToken() == ".w"))
       Inst.setOpcode(ARM::tLDRpci);
     else
       Inst.setOpcode(ARM::t2LDRpci);
@@ -6981,9 +6971,10 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
     else if (Inst.getOpcode() == ARM::t2LDRConstPool)
       TmpInst.setOpcode(ARM::t2LDRpci);
     const ARMOperand &PoolOperand =
-      (HasWideQualifier ?
-       static_cast<ARMOperand &>(*Operands[4]) :
-       static_cast<ARMOperand &>(*Operands[3]));
+      (static_cast<ARMOperand &>(*Operands[2]).isToken() &&
+       static_cast<ARMOperand &>(*Operands[2]).getToken() == ".w") ?
+      static_cast<ARMOperand &>(*Operands[4]) :
+      static_cast<ARMOperand &>(*Operands[3]);
     const MCExpr *SubExprVal = PoolOperand.getConstantPoolImm();
     // If SubExprVal is a constant we may be able to use a MOV
     if (isa<MCConstantExpr>(SubExprVal) &&
@@ -8126,7 +8117,8 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
     if (isARMLowRegister(Inst.getOperand(0).getReg()) &&
         isARMLowRegister(Inst.getOperand(1).getReg()) &&
         Inst.getOperand(5).getReg() == (inITBlock() ? 0 : ARM::CPSR) &&
-        !HasWideQualifier) {
+        !(static_cast<ARMOperand &>(*Operands[3]).isToken() &&
+          static_cast<ARMOperand &>(*Operands[3]).getToken() == ".w")) {
       unsigned NewOpc;
       switch (Inst.getOpcode()) {
       default: llvm_unreachable("unexpected opcode");
@@ -8160,8 +8152,7 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
         isARMLowRegister(Inst.getOperand(1).getReg()) &&
         isARMLowRegister(Inst.getOperand(2).getReg()) &&
         Inst.getOperand(0).getReg() == Inst.getOperand(1).getReg() &&
-        inITBlock() == (Inst.getOpcode() == ARM::t2MOVsr) &&
-        !HasWideQualifier)
+        inITBlock() == (Inst.getOpcode() == ARM::t2MOVsr))
       isNarrow = true;
     MCInst TmpInst;
     unsigned newOpc;
@@ -8195,8 +8186,7 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
     bool isNarrow = false;
     if (isARMLowRegister(Inst.getOperand(0).getReg()) &&
         isARMLowRegister(Inst.getOperand(1).getReg()) &&
-        inITBlock() == (Inst.getOpcode() == ARM::t2MOVsi) &&
-        !HasWideQualifier)
+        inITBlock() == (Inst.getOpcode() == ARM::t2MOVsi))
       isNarrow = true;
     MCInst TmpInst;
     unsigned newOpc;
@@ -8425,8 +8415,10 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
         !isARMLowRegister(Inst.getOperand(0).getReg()) ||
         (Inst.getOperand(2).isImm() &&
          (unsigned)Inst.getOperand(2).getImm() > 255) ||
-        Inst.getOperand(5).getReg() != (inITBlock() ? 0 : ARM::CPSR) ||
-        HasWideQualifier)
+        ((!inITBlock() && Inst.getOperand(5).getReg() != ARM::CPSR) ||
+         (inITBlock() && Inst.getOperand(5).getReg() != 0)) ||
+        (static_cast<ARMOperand &>(*Operands[3]).isToken() &&
+         static_cast<ARMOperand &>(*Operands[3]).getToken() == ".w"))
       break;
     MCInst TmpInst;
     TmpInst.setOpcode(Inst.getOpcode() == ARM::t2ADDri ?
@@ -8455,7 +8447,8 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
     }
     if (!Transform ||
         Inst.getOperand(5).getReg() != 0 ||
-        HasWideQualifier)
+        (static_cast<ARMOperand &>(*Operands[3]).isToken() &&
+         static_cast<ARMOperand &>(*Operands[3]).getToken() == ".w"))
       break;
     MCInst TmpInst;
     TmpInst.setOpcode(ARM::tADDhirr);
@@ -8575,8 +8568,11 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
     if (isARMLowRegister(Inst.getOperand(0).getReg()) &&
         (Inst.getOperand(1).isImm() &&
          (unsigned)Inst.getOperand(1).getImm() <= 255) &&
-        Inst.getOperand(4).getReg() == (inITBlock() ? 0 : ARM::CPSR) &&
-        !HasWideQualifier) {
+        ((!inITBlock() && Inst.getOperand(2).getImm() == ARMCC::AL &&
+          Inst.getOperand(4).getReg() == ARM::CPSR) ||
+         (inITBlock() && Inst.getOperand(4).getReg() == 0)) &&
+        (!static_cast<ARMOperand &>(*Operands[2]).isToken() ||
+         static_cast<ARMOperand &>(*Operands[2]).getToken() != ".w")) {
       // The operands aren't in the same order for tMOVi8...
       MCInst TmpInst;
       TmpInst.setOpcode(ARM::tMOVi8);
@@ -8597,7 +8593,8 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
         isARMLowRegister(Inst.getOperand(1).getReg()) &&
         Inst.getOperand(2).getImm() == ARMCC::AL &&
         Inst.getOperand(4).getReg() == ARM::CPSR &&
-        !HasWideQualifier) {
+        (!static_cast<ARMOperand &>(*Operands[2]).isToken() ||
+         static_cast<ARMOperand &>(*Operands[2]).getToken() != ".w")) {
       // The operands aren't the same for tMOV[S]r... (no cc_out)
       MCInst TmpInst;
       TmpInst.setOpcode(Inst.getOperand(4).getReg() ? ARM::tMOVSr : ARM::tMOVr);
@@ -8619,7 +8616,8 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
     if (isARMLowRegister(Inst.getOperand(0).getReg()) &&
         isARMLowRegister(Inst.getOperand(1).getReg()) &&
         Inst.getOperand(2).getImm() == 0 &&
-        !HasWideQualifier) {
+        (!static_cast<ARMOperand &>(*Operands[2]).isToken() ||
+         static_cast<ARMOperand &>(*Operands[2]).getToken() != ".w")) {
       unsigned NewOpc;
       switch (Inst.getOpcode()) {
       default: llvm_unreachable("Illegal opcode!");
@@ -8718,8 +8716,11 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
     if ((isARMLowRegister(Inst.getOperand(1).getReg()) &&
          isARMLowRegister(Inst.getOperand(2).getReg())) &&
         Inst.getOperand(0).getReg() == Inst.getOperand(1).getReg() &&
-        Inst.getOperand(5).getReg() == (inITBlock() ? 0 : ARM::CPSR) &&
-        !HasWideQualifier) {
+        ((!inITBlock() && Inst.getOperand(5).getReg() == ARM::CPSR) ||
+         (inITBlock() && Inst.getOperand(5).getReg() != ARM::CPSR)) &&
+        (!static_cast<ARMOperand &>(*Operands[3]).isToken() ||
+         !static_cast<ARMOperand &>(*Operands[3]).getToken().equals_lower(
+             ".w"))) {
       unsigned NewOpc;
       switch (Inst.getOpcode()) {
         default: llvm_unreachable("unexpected opcode");
@@ -8755,8 +8756,11 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
          isARMLowRegister(Inst.getOperand(2).getReg())) &&
         (Inst.getOperand(0).getReg() == Inst.getOperand(1).getReg() ||
          Inst.getOperand(0).getReg() == Inst.getOperand(2).getReg()) &&
-        Inst.getOperand(5).getReg() == (inITBlock() ? 0 : ARM::CPSR) &&
-        !HasWideQualifier) {
+        ((!inITBlock() && Inst.getOperand(5).getReg() == ARM::CPSR) ||
+         (inITBlock() && Inst.getOperand(5).getReg() != ARM::CPSR)) &&
+        (!static_cast<ARMOperand &>(*Operands[3]).isToken() ||
+         !static_cast<ARMOperand &>(*Operands[3]).getToken().equals_lower(
+             ".w"))) {
       unsigned NewOpc;
       switch (Inst.getOpcode()) {
         default: llvm_unreachable("unexpected opcode");
@@ -8992,8 +8996,6 @@ unsigned ARMAsmParser::MatchInstruction(OperandVector &Operands, MCInst &Inst,
   return PlainMatchResult;
 }
 
-std::string ARMMnemonicSpellCheck(StringRef S, uint64_t FBS);
-
 static const char *getSubtargetFeatureName(uint64_t Val);
 bool ARMAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                            OperandVector &Operands,
@@ -9087,13 +9089,9 @@ bool ARMAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
 
     return Error(ErrorLoc, "invalid operand for instruction");
   }
-  case Match_MnemonicFail: {
-    uint64_t FBS = ComputeAvailableFeatures(getSTI().getFeatureBits());
-    std::string Suggestion = ARMMnemonicSpellCheck(
-      ((ARMOperand &)*Operands[0]).getToken(), FBS);
-    return Error(IDLoc, "invalid instruction" + Suggestion,
+  case Match_MnemonicFail:
+    return Error(IDLoc, "invalid instruction",
                  ((ARMOperand &)*Operands[0]).getLocRange());
-  }
   case Match_RequiresNotITBlock:
     return Error(IDLoc, "flag setting instruction only valid outside IT block");
   case Match_RequiresITBlock:

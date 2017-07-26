@@ -23,8 +23,6 @@ public:
     TargetLoweringObjectFileELF()
   {}
 
-  void Initialize(MCContext &Ctx, const TargetMachine &TM) override;
-
   const MCExpr *getTTypeGlobalReference(const GlobalValue *GV,
                                         unsigned Encoding,
                                         const TargetMachine &TM,

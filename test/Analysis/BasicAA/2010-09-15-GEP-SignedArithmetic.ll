@@ -3,7 +3,7 @@
 
 target datalayout = "e-p:32:32:32"
 
-; CHECK: 1 may alias responses
+; CHECK: 1 partial alias response
 
 define i32 @test(i32* %tab, i32 %indvar) nounwind {
   %tmp31 = mul i32 %indvar, -2

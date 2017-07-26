@@ -42,21 +42,16 @@ namespace llvm {
 
 class OrcCBindingsStack;
 
-DEFINE_SIMPLE_CONVERSION_FUNCTIONS(std::shared_ptr<Module>,
-                                   LLVMSharedModuleRef)
-DEFINE_SIMPLE_CONVERSION_FUNCTIONS(std::shared_ptr<MemoryBuffer>,
-                                   LLVMSharedObjectBufferRef)
 DEFINE_SIMPLE_CONVERSION_FUNCTIONS(OrcCBindingsStack, LLVMOrcJITStackRef)
 DEFINE_SIMPLE_CONVERSION_FUNCTIONS(TargetMachine, LLVMTargetMachineRef)
 
 class OrcCBindingsStack {
 public:
-
   using CompileCallbackMgr = orc::JITCompileCallbackManager;
-  using ObjLayerT = orc::RTDyldObjectLinkingLayer;
-  using CompileLayerT = orc::IRCompileLayer<ObjLayerT, orc::SimpleCompiler>;
+  using ObjLayerT = orc::RTDyldObjectLinkingLayer<>;
+  using CompileLayerT = orc::IRCompileLayer<ObjLayerT>;
   using CODLayerT =
-        orc::CompileOnDemandLayer<CompileLayerT, CompileCallbackMgr>;
+      orc::CompileOnDemandLayer<CompileLayerT, CompileCallbackMgr>;
 
   using CallbackManagerBuilder =
       std::function<std::unique_ptr<CompileCallbackMgr>()>;
@@ -75,7 +70,7 @@ private:
 
   template <typename LayerT> class GenericHandleImpl : public GenericHandle {
   public:
-    GenericHandleImpl(LayerT &Layer, typename LayerT::ModuleHandleT Handle)
+    GenericHandleImpl(LayerT &Layer, typename LayerT::ModuleSetHandleT Handle)
         : Layer(Layer), Handle(std::move(Handle)) {}
 
     JITSymbol findSymbolIn(const std::string &Name,
@@ -83,21 +78,24 @@ private:
       return Layer.findSymbolIn(Handle, Name, ExportedSymbolsOnly);
     }
 
-    void removeModule() override { return Layer.removeModule(Handle); }
+    void removeModule() override { return Layer.removeModuleSet(Handle); }
 
   private:
     LayerT &Layer;
-    typename LayerT::ModuleHandleT Handle;
+    typename LayerT::ModuleSetHandleT Handle;
   };
 
   template <typename LayerT>
   std::unique_ptr<GenericHandleImpl<LayerT>>
-  createGenericHandle(LayerT &Layer, typename LayerT::ModuleHandleT Handle) {
+  createGenericHandle(LayerT &Layer, typename LayerT::ModuleSetHandleT Handle) {
     return llvm::make_unique<GenericHandleImpl<LayerT>>(Layer,
                                                         std::move(Handle));
   }
 
 public:
+  // We need a 'ModuleSetHandleT' to conform to the layer concept.
+  using ModuleSetHandleT = unsigned;
+
   using ModuleHandleT = unsigned;
 
   OrcCBindingsStack(TargetMachine &TM,
@@ -105,10 +103,6 @@ public:
                     IndirectStubsManagerBuilder IndirectStubsMgrBuilder)
       : DL(TM.createDataLayout()), IndirectStubsMgr(IndirectStubsMgrBuilder()),
         CCMgr(std::move(CCMgr)),
-        ObjectLayer(
-          []() {
-            return std::make_shared<SectionMemoryManager>();
-          }),
         CompileLayer(ObjectLayer, orc::SimpleCompiler(TM)),
         CODLayer(CompileLayer,
                  [](Function &F) { return std::set<Function *>({&F}); },
@@ -159,7 +153,7 @@ public:
     return mapError(IndirectStubsMgr->updatePointer(Name, Addr));
   }
 
-  std::shared_ptr<JITSymbolResolver>
+  std::unique_ptr<JITSymbolResolver>
   createResolver(LLVMOrcSymbolResolverFn ExternalResolver,
                  void *ExternalResolverCtx) {
     return orc::createLambdaResolver(
@@ -188,7 +182,7 @@ public:
   }
 
   template <typename LayerT>
-  ModuleHandleT addIRModule(LayerT &Layer, std::shared_ptr<Module> M,
+  ModuleHandleT addIRModule(LayerT &Layer, Module *M,
                             std::unique_ptr<RuntimeDyld::MemoryManager> MemMgr,
                             LLVMOrcSymbolResolverFn ExternalResolver,
                             void *ExternalResolverCtx) {
@@ -208,7 +202,11 @@ public:
     auto Resolver = createResolver(ExternalResolver, ExternalResolverCtx);
 
     // Add the module to the JIT.
-    auto LH = Layer.addModule(std::move(M), std::move(Resolver));
+    std::vector<Module *> S;
+    S.push_back(std::move(M));
+
+    auto LH = Layer.addModuleSet(std::move(S), std::move(MemMgr),
+                                 std::move(Resolver));
     ModuleHandleT H = createHandle(Layer, LH);
 
     // Run the static constructors, and save the static destructor runner for
@@ -221,7 +219,7 @@ public:
     return H;
   }
 
-  ModuleHandleT addIRModuleEager(std::shared_ptr<Module> M,
+  ModuleHandleT addIRModuleEager(Module *M,
                                  LLVMOrcSymbolResolverFn ExternalResolver,
                                  void *ExternalResolverCtx) {
     return addIRModule(CompileLayer, std::move(M),
@@ -229,7 +227,7 @@ public:
                        std::move(ExternalResolver), ExternalResolverCtx);
   }
 
-  ModuleHandleT addIRModuleLazy(std::shared_ptr<Module> M,
+  ModuleHandleT addIRModuleLazy(Module *M,
                                 LLVMOrcSymbolResolverFn ExternalResolver,
                                 void *ExternalResolverCtx) {
     return addIRModule(CODLayer, std::move(M),
@@ -258,7 +256,8 @@ public:
 
 private:
   template <typename LayerT>
-  unsigned createHandle(LayerT &Layer, typename LayerT::ModuleHandleT Handle) {
+  unsigned createHandle(LayerT &Layer,
+                        typename LayerT::ModuleSetHandleT Handle) {
     unsigned NewHandle;
     if (!FreeHandleIndexes.empty()) {
       NewHandle = FreeHandleIndexes.back();

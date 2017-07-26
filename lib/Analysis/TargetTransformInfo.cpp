@@ -89,9 +89,8 @@ TargetTransformInfo::getEstimatedNumberOfCaseClusters(const SwitchInst &SI,
   return TTIImpl->getEstimatedNumberOfCaseClusters(SI, JTSize);
 }
 
-int TargetTransformInfo::getUserCost(const User *U,
-    ArrayRef<const Value *> Operands) const {
-  int Cost = TTIImpl->getUserCost(U, Operands);
+int TargetTransformInfo::getUserCost(const User *U) const {
+  int Cost = TTIImpl->getUserCost(U);
   assert(Cost >= 0 && "TTI should not produce negative costs!");
   return Cost;
 }
@@ -121,8 +120,8 @@ bool TargetTransformInfo::isLoweredToCall(const Function *F) const {
 }
 
 void TargetTransformInfo::getUnrollingPreferences(
-    Loop *L, ScalarEvolution &SE, UnrollingPreferences &UP) const {
-  return TTIImpl->getUnrollingPreferences(L, SE, UP);
+    Loop *L, UnrollingPreferences &UP) const {
+  return TTIImpl->getUnrollingPreferences(L, UP);
 }
 
 bool TargetTransformInfo::isLegalAddImmediate(int64_t Imm) const {

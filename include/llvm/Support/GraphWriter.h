@@ -1,4 +1,4 @@
-//===- llvm/Support/GraphWriter.h - Write graph to a .dot file --*- C++ -*-===//
+//===-- llvm/Support/GraphWriter.h - Write graph to a .dot file -*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -24,40 +24,30 @@
 #define LLVM_SUPPORT_GRAPHWRITER_H
 
 #include "llvm/ADT/GraphTraits.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/DOTGraphTraits.h"
 #include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <cstddef>
-#include <iterator>
-#include <string>
-#include <type_traits>
 #include <vector>
 
 namespace llvm {
 
 namespace DOT {  // Private functions...
+  std::string EscapeString(const std::string &Label);
 
-std::string EscapeString(const std::string &Label);
-
-/// \brief Get a color string for this node number. Simply round-robin selects
-/// from a reasonable number of colors.
-StringRef getColorString(unsigned NodeNumber);
-
-} // end namespace DOT
+  /// \brief Get a color string for this node number. Simply round-robin selects
+  /// from a reasonable number of colors.
+  StringRef getColorString(unsigned NodeNumber);
+}
 
 namespace GraphProgram {
-
-enum Name {
-  DOT,
-  FDP,
-  NEATO,
-  TWOPI,
-  CIRCO
-};
-
-} // end namespace GraphProgram
+   enum Name {
+      DOT,
+      FDP,
+      NEATO,
+      TWOPI,
+      CIRCO
+   };
+}
 
 bool DisplayGraph(StringRef Filename, bool wait = true,
                   GraphProgram::Name program = GraphProgram::DOT);
@@ -67,11 +57,11 @@ class GraphWriter {
   raw_ostream &O;
   const GraphType &G;
 
-  using DOTTraits = DOTGraphTraits<GraphType>;
-  using GTraits = GraphTraits<GraphType>;
-  using NodeRef = typename GTraits::NodeRef;
-  using node_iterator = typename GTraits::nodes_iterator;
-  using child_iterator = typename GTraits::ChildIteratorType;
+  typedef DOTGraphTraits<GraphType>           DOTTraits;
+  typedef GraphTraits<GraphType>              GTraits;
+  typedef typename GTraits::NodeRef           NodeRef;
+  typedef typename GTraits::nodes_iterator    node_iterator;
+  typedef typename GTraits::ChildIteratorType child_iterator;
   DOTTraits DTraits;
 
   static_assert(std::is_pointer<NodeRef>::value,
@@ -356,6 +346,6 @@ void ViewGraph(const GraphType &G, const Twine &Name,
   DisplayGraph(Filename, false, Program);
 }
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_SUPPORT_GRAPHWRITER_H
+#endif

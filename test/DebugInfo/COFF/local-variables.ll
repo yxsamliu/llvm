@@ -193,7 +193,7 @@
 ; OBJ:        ChangeLineOffset: 1
 ; OBJ:        ChangeCodeOffset: 0x35
 ; OBJ:        ChangeCodeOffsetAndLineOffset: {CodeOffset: 0xD, LineOffset: 1}
-; OBJ:        ChangeCodeLength: 0xA
+; OBJ:        ChangeCodeLength: 0xF
 ; OBJ:      ]
 ; OBJ:    }
 ; OBJ:    Local {

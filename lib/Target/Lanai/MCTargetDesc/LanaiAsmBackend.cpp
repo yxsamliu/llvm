@@ -49,9 +49,8 @@ public:
   LanaiAsmBackend(const Target &T, Triple::OSType OST)
       : MCAsmBackend(), OSType(OST) {}
 
-  void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                  const MCValue &Target, MutableArrayRef<char> Data,
-                  uint64_t Value, bool IsPCRel) const override;
+  void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
+                  uint64_t Value, bool IsPCRel, MCContext &Ctx) const override;
 
   MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override;
 
@@ -89,10 +88,9 @@ bool LanaiAsmBackend::writeNopData(uint64_t Count, MCObjectWriter *OW) const {
   return true;
 }
 
-void LanaiAsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                                 const MCValue &Target,
-                                 MutableArrayRef<char> Data, uint64_t Value,
-                                 bool /*IsPCRel*/) const {
+void LanaiAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
+                                 unsigned /*DataSize*/, uint64_t Value,
+                                 bool /*IsPCRel*/, MCContext & /*Ctx*/) const {
   MCFixupKind Kind = Fixup.getKind();
   Value = adjustFixupValue(static_cast<unsigned>(Kind), Value);
 

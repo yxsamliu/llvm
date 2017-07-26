@@ -14,7 +14,6 @@
 #include "AArch64MCTargetDesc.h"
 #include "AArch64ELFStreamer.h"
 #include "AArch64MCAsmInfo.h"
-#include "AArch64WinCOFFStreamer.h"
 #include "InstPrinter/AArch64InstPrinter.h"
 #include "llvm/MC/MCInstrAnalysis.h"
 #include "llvm/MC/MCInstrInfo.h"
@@ -60,10 +59,8 @@ static MCAsmInfo *createAArch64MCAsmInfo(const MCRegisterInfo &MRI,
   MCAsmInfo *MAI;
   if (TheTriple.isOSBinFormatMachO())
     MAI = new AArch64MCAsmInfoDarwin();
-  else if (TheTriple.isOSBinFormatCOFF())
-    MAI = new AArch64MCAsmInfoCOFF();
   else {
-    assert(TheTriple.isOSBinFormatELF() && "Invalid target");
+    assert(TheTriple.isOSBinFormatELF() && "Only expect Darwin or ELF");
     MAI = new AArch64MCAsmInfoELF(TheTriple);
   }
 
@@ -77,8 +74,8 @@ static MCAsmInfo *createAArch64MCAsmInfo(const MCRegisterInfo &MRI,
 
 static void adjustCodeGenOpts(const Triple &TT, Reloc::Model RM,
                               CodeModel::Model &CM) {
-  assert((TT.isOSBinFormatELF() || TT.isOSBinFormatMachO() ||
-          TT.isOSBinFormatCOFF()) && "Invalid target");
+  assert((TT.isOSBinFormatELF() || TT.isOSBinFormatMachO()) &&
+         "Only expect Darwin and ELF targets");
 
   if (CM == CodeModel::Default)
     CM = CodeModel::Small;
@@ -125,14 +122,6 @@ static MCStreamer *createMachOStreamer(MCContext &Ctx, MCAsmBackend &TAB,
                              /*LabelSections*/ true);
 }
 
-static MCStreamer *createWinCOFFStreamer(MCContext &Ctx, MCAsmBackend &TAB,
-                                         raw_pwrite_stream &OS,
-                                         MCCodeEmitter *Emitter, bool RelaxAll,
-                                         bool IncrementalLinkerCompatible) {
-  return createAArch64WinCOFFStreamer(Ctx, TAB, OS, Emitter, RelaxAll,
-                                      IncrementalLinkerCompatible);
-}
-
 static MCInstrAnalysis *createAArch64InstrAnalysis(const MCInstrInfo *Info) {
   return new MCInstrAnalysis(Info);
 }
@@ -165,7 +154,6 @@ extern "C" void LLVMInitializeAArch64TargetMC() {
     // Register the obj streamers.
     TargetRegistry::RegisterELFStreamer(*T, createELFStreamer);
     TargetRegistry::RegisterMachOStreamer(*T, createMachOStreamer);
-    TargetRegistry::RegisterCOFFStreamer(*T, createWinCOFFStreamer);
 
     // Register the obj target streamer.
     TargetRegistry::RegisterObjectTargetStreamer(

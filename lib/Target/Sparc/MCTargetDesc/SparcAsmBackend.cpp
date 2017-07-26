@@ -203,14 +203,15 @@ namespace {
       return InfosBE[Kind - FirstTargetFixupKind];
     }
 
-    bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
-                               const MCValue &Target) override {
+    void processFixupValue(const MCAssembler &Asm, const MCAsmLayout &Layout,
+                           const MCFixup &Fixup, const MCFragment *DF,
+                           const MCValue &Target, uint64_t &Value,
+                           bool &IsResolved) override {
       switch ((Sparc::Fixups)Fixup.getKind()) {
-      default:
-        return false;
+      default: break;
       case Sparc::fixup_sparc_wplt30:
         if (Target.getSymA()->getSymbol().isTemporary())
-          return false;
+          return;
       case Sparc::fixup_sparc_tls_gd_hi22:
       case Sparc::fixup_sparc_tls_gd_lo10:
       case Sparc::fixup_sparc_tls_gd_add:
@@ -228,8 +229,7 @@ namespace {
       case Sparc::fixup_sparc_tls_ie_ldx:
       case Sparc::fixup_sparc_tls_ie_add:
       case Sparc::fixup_sparc_tls_le_hix22:
-      case Sparc::fixup_sparc_tls_le_lox10:
-        return true;
+      case Sparc::fixup_sparc_tls_le_lox10:  IsResolved = false; break;
       }
     }
 
@@ -273,9 +273,9 @@ namespace {
     ELFSparcAsmBackend(const Target &T, Triple::OSType OSType) :
       SparcAsmBackend(T), OSType(OSType) { }
 
-    void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                    const MCValue &Target, MutableArrayRef<char> Data,
-                    uint64_t Value, bool IsPCRel) const override {
+    void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
+                    uint64_t Value, bool IsPCRel,
+                    MCContext &Ctx) const override {
 
       Value = adjustFixupValue(Fixup.getKind(), Value);
       if (!Value) return;           // Doesn't change encoding.

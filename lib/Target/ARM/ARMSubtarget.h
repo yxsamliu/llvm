@@ -246,11 +246,6 @@ protected:
   /// avoid issue "normal" call instructions to callees which do not return.
   bool HasRetAddrStack = false;
 
-  /// HasBranchPredictor - True if the subtarget has a branch predictor. Having
-  /// a branch predictor or not changes the expected cost of taking a branch
-  /// which affects the choice of whether to use predicated instructions.
-  bool HasBranchPredictor = true;
-
   /// HasMPExtension - True if the subtarget supports Multiprocessing
   /// extension (ARMv7 only).
   bool HasMPExtension = false;
@@ -289,10 +284,6 @@ protected:
 
   /// HasFPAO - if true, processor  does positive address offset computation faster
   bool HasFPAO = false;
-
-  /// HasFuseAES - if true, processor executes back to back AES instruction
-  /// pairs faster.
-  bool HasFuseAES = false;
 
   /// If true, if conversion may decide to leave some instructions unpredicated.
   bool IsProfitableToUnpredicate = false;
@@ -559,7 +550,6 @@ public:
   bool cheapPredicableCPSRDef() const { return CheapPredicableCPSRDef; }
   bool avoidMOVsShifterOperand() const { return AvoidMOVsShifterOperand; }
   bool hasRetAddrStack() const { return HasRetAddrStack; }
-  bool hasBranchPredictor() const { return HasBranchPredictor; }
   bool hasMPExtension() const { return HasMPExtension; }
   bool hasDSP() const { return HasDSP; }
   bool useNaClTrap() const { return UseNaClTrap; }
@@ -570,10 +560,6 @@ public:
   bool hasFP16() const { return HasFP16; }
   bool hasD16() const { return HasD16; }
   bool hasFullFP16() const { return HasFullFP16; }
-
-  bool hasFuseAES() const { return HasFuseAES; }
-  /// \brief Return true if the CPU supports any kind of instruction fusion.
-  bool hasFusion() const { return hasFuseAES(); }
 
   const Triple &getTargetTriple() const { return TargetTriple; }
 

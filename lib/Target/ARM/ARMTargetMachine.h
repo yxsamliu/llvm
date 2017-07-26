@@ -36,6 +36,7 @@ public:
 
 protected:
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
+  ARMSubtarget Subtarget;
   bool isLittle;
   mutable StringMap<std::unique_ptr<ARMSubtarget>> SubtargetMap;
 
@@ -46,8 +47,8 @@ public:
                        CodeGenOpt::Level OL, bool isLittle);
   ~ARMBaseTargetMachine() override;
 
+  const ARMSubtarget *getSubtargetImpl() const { return &Subtarget; }
   const ARMSubtarget *getSubtargetImpl(const Function &F) const override;
-  const ARMSubtarget *getSubtargetImpl() const = delete;
   bool isLittleEndian() const { return isLittle; }
 
   /// \brief Get the TargetIRAnalysis for this target.

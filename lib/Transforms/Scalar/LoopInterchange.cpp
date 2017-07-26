@@ -757,11 +757,8 @@ bool LoopInterchangeLegality::currentLimitations() {
   PHINode *InnerInductionVar;
   SmallVector<PHINode *, 8> Inductions;
   SmallVector<PHINode *, 8> Reductions;
-  if (!findInductionAndReductions(InnerLoop, Inductions, Reductions)) {
-    DEBUG(dbgs() << "Only inner loops with induction or reduction PHI nodes "
-                 << "are supported currently.\n");
+  if (!findInductionAndReductions(InnerLoop, Inductions, Reductions))
     return true;
-  }
 
   // TODO: Currently we handle only loops with 1 induction variable.
   if (Inductions.size() != 1) {
@@ -774,25 +771,16 @@ bool LoopInterchangeLegality::currentLimitations() {
 
   InnerInductionVar = Inductions.pop_back_val();
   Reductions.clear();
-  if (!findInductionAndReductions(OuterLoop, Inductions, Reductions)) {
-    DEBUG(dbgs() << "Only outer loops with induction or reduction PHI nodes "
-                 << "are supported currently.\n");
+  if (!findInductionAndReductions(OuterLoop, Inductions, Reductions))
     return true;
-  }
 
   // Outer loop cannot have reduction because then loops will not be tightly
   // nested.
-  if (!Reductions.empty()) {
-    DEBUG(dbgs() << "Outer loops with reductions are not supported "
-                 << "currently.\n");
+  if (!Reductions.empty())
     return true;
-  }
   // TODO: Currently we handle only loops with 1 induction variable.
-  if (Inductions.size() != 1) {
-    DEBUG(dbgs() << "Loops with more than 1 induction variables are not "
-                 << "supported currently.\n");
+  if (Inductions.size() != 1)
     return true;
-  }
 
   // TODO: Triangular loops are not handled for now.
   if (!isLoopStructureUnderstood(InnerInductionVar)) {
@@ -803,16 +791,12 @@ bool LoopInterchangeLegality::currentLimitations() {
   // TODO: We only handle LCSSA PHI's corresponding to reduction for now.
   BasicBlock *LoopExitBlock =
       getLoopLatchExitBlock(OuterLoopLatch, OuterLoopHeader);
-  if (!LoopExitBlock || !containsSafePHI(LoopExitBlock, true)) {
-    DEBUG(dbgs() << "Can only handle LCSSA PHIs in outer loops currently.\n");
+  if (!LoopExitBlock || !containsSafePHI(LoopExitBlock, true))
     return true;
-  }
 
   LoopExitBlock = getLoopLatchExitBlock(InnerLoopLatch, InnerLoopHeader);
-  if (!LoopExitBlock || !containsSafePHI(LoopExitBlock, false)) {
-    DEBUG(dbgs() << "Can only handle LCSSA PHIs in inner loops currently.\n");
+  if (!LoopExitBlock || !containsSafePHI(LoopExitBlock, false))
     return true;
-  }
 
   // TODO: Current limitation: Since we split the inner loop latch at the point
   // were induction variable is incremented (induction.next); We cannot have
@@ -832,11 +816,8 @@ bool LoopInterchangeLegality::currentLimitations() {
     InnerIndexVarInc =
         dyn_cast<Instruction>(InnerInductionVar->getIncomingValue(0));
 
-  if (!InnerIndexVarInc) {
-    DEBUG(dbgs() << "Did not find an instruction to increment the induction "
-                 << "variable.\n");
+  if (!InnerIndexVarInc)
     return true;
-  }
 
   // Since we split the inner loop latch on this induction variable. Make sure
   // we do not have any instruction between the induction variable and branch
@@ -846,24 +827,19 @@ bool LoopInterchangeLegality::currentLimitations() {
   for (const Instruction &I : reverse(*InnerLoopLatch)) {
     if (isa<BranchInst>(I) || isa<CmpInst>(I) || isa<TruncInst>(I))
       continue;
-
     // We found an instruction. If this is not induction variable then it is not
     // safe to split this loop latch.
-    if (!I.isIdenticalTo(InnerIndexVarInc)) {
-      DEBUG(dbgs() << "Found unsupported instructions between induction "
-                   << "variable increment and branch.\n");
+    if (!I.isIdenticalTo(InnerIndexVarInc))
       return true;
-    }
 
     FoundInduction = true;
     break;
   }
   // The loop latch ended and we didn't find the induction variable return as
   // current limitation.
-  if (!FoundInduction) {
-    DEBUG(dbgs() << "Did not find the induction variable.\n");
+  if (!FoundInduction)
     return true;
-  }
+
   return false;
 }
 

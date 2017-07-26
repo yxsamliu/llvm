@@ -140,6 +140,8 @@ struct FunctionSummaryYaml {
 } // End yaml namespace
 } // End llvm namespace
 
+LLVM_YAML_IS_FLOW_SEQUENCE_VECTOR(uint64_t)
+
 namespace llvm {
 namespace yaml {
 
@@ -186,6 +188,7 @@ template <> struct MappingTraits<FunctionSummaryYaml> {
 
 LLVM_YAML_IS_STRING_MAP(TypeIdSummary)
 LLVM_YAML_IS_SEQUENCE_VECTOR(FunctionSummaryYaml)
+LLVM_YAML_IS_FLOW_SEQUENCE_VECTOR(std::string)
 
 namespace llvm {
 namespace yaml {

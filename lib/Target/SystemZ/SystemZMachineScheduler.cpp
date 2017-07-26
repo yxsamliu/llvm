@@ -23,7 +23,7 @@ using namespace llvm;
 #ifndef NDEBUG
 // Print the set of SUs
 void SystemZPostRASchedStrategy::SUSet::
-dump(SystemZHazardRecognizer &HazardRec) const {
+dump(SystemZHazardRecognizer &HazardRec) {
   dbgs() << "{";
   for (auto &SU : *this) {
     HazardRec.dumpSU(SU, dbgs());

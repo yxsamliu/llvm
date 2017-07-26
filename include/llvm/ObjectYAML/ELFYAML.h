@@ -16,12 +16,8 @@
 #ifndef LLVM_OBJECTYAML_ELFYAML_H
 #define LLVM_OBJECTYAML_ELFYAML_H
 
-#include "llvm/ADT/StringRef.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/ObjectYAML/YAML.h"
-#include "llvm/Support/YAMLTraits.h"
-#include <cstdint>
-#include <memory>
-#include <vector>
 
 namespace llvm {
 namespace ELFYAML {
@@ -70,7 +66,6 @@ struct FileHeader {
   ELF_EF Flags;
   llvm::yaml::Hex64 Entry;
 };
-
 struct Symbol {
   StringRef Name;
   ELF_STT Type;
@@ -79,7 +74,6 @@ struct Symbol {
   llvm::yaml::Hex64 Size;
   uint8_t Other;
 };
-
 struct LocalGlobalWeakSymbols {
   std::vector<Symbol> Local;
   std::vector<Symbol> Global;
@@ -106,16 +100,13 @@ struct Section {
   StringRef Link;
   StringRef Info;
   llvm::yaml::Hex64 AddressAlign;
-
   Section(SectionKind Kind) : Kind(Kind) {}
   virtual ~Section();
 };
 struct RawContentSection : Section {
   yaml::BinaryRef Content;
   llvm::yaml::Hex64 Size;
-
   RawContentSection() : Section(SectionKind::RawContent) {}
-
   static bool classof(const Section *S) {
     return S->Kind == SectionKind::RawContent;
   }
@@ -123,9 +114,7 @@ struct RawContentSection : Section {
 
 struct NoBitsSection : Section {
   llvm::yaml::Hex64 Size;
-
   NoBitsSection() : Section(SectionKind::NoBits) {}
-
   static bool classof(const Section *S) {
     return S->Kind == SectionKind::NoBits;
   }
@@ -135,9 +124,7 @@ struct Group : Section {
   // Members of a group contain a flag and a list of section indices
   // that are part of the group.
   std::vector<SectionOrType> Members;
-
   Group() : Section(SectionKind::Group) {}
-
   static bool classof(const Section *S) {
     return S->Kind == SectionKind::Group;
   }
@@ -149,12 +136,9 @@ struct Relocation {
   ELF_REL Type;
   StringRef Symbol;
 };
-
 struct RelocationSection : Section {
   std::vector<Relocation> Relocations;
-
   RelocationSection() : Section(SectionKind::Relocation) {}
-
   static bool classof(const Section *S) {
     return S->Kind == SectionKind::Relocation;
   }
@@ -173,9 +157,7 @@ struct MipsABIFlags : Section {
   MIPS_AFL_ASE ASEs;
   MIPS_AFL_FLAGS1 Flags1;
   llvm::yaml::Hex32 Flags2;
-
   MipsABIFlags() : Section(SectionKind::MipsABIFlags) {}
-
   static bool classof(const Section *S) {
     return S->Kind == SectionKind::MipsABIFlags;
   }
@@ -334,4 +316,4 @@ template <> struct MappingTraits<ELFYAML::SectionOrType> {
 } // end namespace yaml
 } // end namespace llvm
 
-#endif // LLVM_OBJECTYAML_ELFYAML_H
+#endif

@@ -43,25 +43,26 @@ public:
 
   const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override {
     const static MCFixupKindInfo Infos[AArch64::NumTargetFixupKinds] = {
-        // This table *must* be in the order that the fixup_* kinds are defined
-        // in AArch64FixupKinds.h.
-        //
-        // Name                           Offset (bits) Size (bits)     Flags
-        {"fixup_aarch64_pcrel_adr_imm21", 0, 32, PCRelFlagVal},
-        {"fixup_aarch64_pcrel_adrp_imm21", 0, 32, PCRelFlagVal},
-        {"fixup_aarch64_add_imm12", 10, 12, 0},
-        {"fixup_aarch64_ldst_imm12_scale1", 10, 12, 0},
-        {"fixup_aarch64_ldst_imm12_scale2", 10, 12, 0},
-        {"fixup_aarch64_ldst_imm12_scale4", 10, 12, 0},
-        {"fixup_aarch64_ldst_imm12_scale8", 10, 12, 0},
-        {"fixup_aarch64_ldst_imm12_scale16", 10, 12, 0},
-        {"fixup_aarch64_ldr_pcrel_imm19", 5, 19, PCRelFlagVal},
-        {"fixup_aarch64_movw", 5, 16, 0},
-        {"fixup_aarch64_pcrel_branch14", 5, 14, PCRelFlagVal},
-        {"fixup_aarch64_pcrel_branch19", 5, 19, PCRelFlagVal},
-        {"fixup_aarch64_pcrel_branch26", 0, 26, PCRelFlagVal},
-        {"fixup_aarch64_pcrel_call26", 0, 26, PCRelFlagVal},
-        {"fixup_aarch64_tlsdesc_call", 0, 0, 0}};
+      // This table *must* be in the order that the fixup_* kinds are defined in
+      // AArch64FixupKinds.h.
+      //
+      // Name                           Offset (bits) Size (bits)     Flags
+      { "fixup_aarch64_pcrel_adr_imm21", 0, 32, PCRelFlagVal },
+      { "fixup_aarch64_pcrel_adrp_imm21", 0, 32, PCRelFlagVal },
+      { "fixup_aarch64_add_imm12", 10, 12, 0 },
+      { "fixup_aarch64_ldst_imm12_scale1", 10, 12, 0 },
+      { "fixup_aarch64_ldst_imm12_scale2", 10, 12, 0 },
+      { "fixup_aarch64_ldst_imm12_scale4", 10, 12, 0 },
+      { "fixup_aarch64_ldst_imm12_scale8", 10, 12, 0 },
+      { "fixup_aarch64_ldst_imm12_scale16", 10, 12, 0 },
+      { "fixup_aarch64_ldr_pcrel_imm19", 5, 19, PCRelFlagVal },
+      { "fixup_aarch64_movw", 5, 16, 0 },
+      { "fixup_aarch64_pcrel_branch14", 5, 14, PCRelFlagVal },
+      { "fixup_aarch64_pcrel_branch19", 5, 19, PCRelFlagVal },
+      { "fixup_aarch64_pcrel_branch26", 0, 26, PCRelFlagVal },
+      { "fixup_aarch64_pcrel_call26", 0, 26, PCRelFlagVal },
+      { "fixup_aarch64_tlsdesc_call", 0, 0, 0 }
+    };
 
     if (Kind < FirstTargetFixupKind)
       return MCAsmBackend::getFixupKindInfo(Kind);
@@ -71,9 +72,8 @@ public:
     return Infos[Kind - FirstTargetFixupKind];
   }
 
-  void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                  const MCValue &Target, MutableArrayRef<char> Data,
-                  uint64_t Value, bool IsPCRel) const override;
+  void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
+                  uint64_t Value, bool IsPCRel, MCContext &Ctx) const override;
 
   bool mayNeedRelaxation(const MCInst &Inst) const override;
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
@@ -261,15 +261,13 @@ unsigned AArch64AsmBackend::getFixupKindContainereSizeInBytes(unsigned Kind) con
   }
 }
 
-void AArch64AsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                                   const MCValue &Target,
-                                   MutableArrayRef<char> Data, uint64_t Value,
-                                   bool IsPCRel) const {
+void AArch64AsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
+                                   unsigned DataSize, uint64_t Value,
+                                   bool IsPCRel, MCContext &Ctx) const {
   unsigned NumBytes = getFixupKindNumBytes(Fixup.getKind());
   if (!Value)
     return; // Doesn't change encoding.
   MCFixupKindInfo Info = getFixupKindInfo(Fixup.getKind());
-  MCContext &Ctx = Asm.getContext();
   // Apply any target-specific value adjustments.
   Value = adjustFixupValue(Fixup, Value, Ctx);
 
@@ -277,7 +275,7 @@ void AArch64AsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
   Value <<= Info.TargetOffset;
 
   unsigned Offset = Fixup.getOffset();
-  assert(Offset + NumBytes <= Data.size() && "Invalid fixup offset!");
+  assert(Offset + NumBytes <= DataSize && "Invalid fixup offset!");
 
   // Used to point to big endian bytes.
   unsigned FulleSizeInBytes = getFixupKindContainereSizeInBytes(Fixup.getKind());
@@ -291,7 +289,7 @@ void AArch64AsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
     }
   } else {
     // Handle as big-endian
-    assert((Offset + FulleSizeInBytes) <= Data.size() && "Invalid fixup size!");
+    assert((Offset + FulleSizeInBytes) <= DataSize && "Invalid fixup size!");
     assert(NumBytes <= FulleSizeInBytes && "Invalid fixup size!");
     for (unsigned i = 0; i != NumBytes; ++i) {
       unsigned Idx = FulleSizeInBytes - 1 - i;
@@ -541,13 +539,16 @@ public:
     return createAArch64ELFObjectWriter(OS, OSABI, IsLittleEndian, IsILP32);
   }
 
-  bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
-                             const MCValue &Target) override;
+  void processFixupValue(const MCAssembler &Asm, const MCAsmLayout &Layout,
+                         const MCFixup &Fixup, const MCFragment *DF,
+                         const MCValue &Target, uint64_t &Value,
+                         bool &IsResolved) override;
 };
 
-bool ELFAArch64AsmBackend::shouldForceRelocation(const MCAssembler &Asm,
-                                                 const MCFixup &Fixup,
-                                                 const MCValue &Target) {
+void ELFAArch64AsmBackend::processFixupValue(
+    const MCAssembler &Asm, const MCAsmLayout &Layout, const MCFixup &Fixup,
+    const MCFragment *DF, const MCValue &Target, uint64_t &Value,
+    bool &IsResolved) {
   // The ADRP instruction adds some multiple of 0x1000 to the current PC &
   // ~0xfff. This means that the required offset to reach a symbol can vary by
   // up to one step depending on where the ADRP is in memory. For example:
@@ -561,22 +562,9 @@ bool ELFAArch64AsmBackend::shouldForceRelocation(const MCAssembler &Asm,
   // section isn't 0x1000-aligned, we therefore need to delegate this decision
   // to the linker -- a relocation!
   if ((uint32_t)Fixup.getKind() == AArch64::fixup_aarch64_pcrel_adrp_imm21)
-    return true;
-  return false;
+    IsResolved = false;
 }
 
-}
-
-namespace {
-class COFFAArch64AsmBackend : public AArch64AsmBackend {
-public:
-  COFFAArch64AsmBackend(const Target &T, const Triple &TheTriple)
-      : AArch64AsmBackend(T, /*IsLittleEndian*/true) {}
-
-  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
-    return createAArch64WinCOFFObjectWriter(OS);
-  }
-};
 }
 
 MCAsmBackend *llvm::createAArch64leAsmBackend(const Target &T,
@@ -587,11 +575,7 @@ MCAsmBackend *llvm::createAArch64leAsmBackend(const Target &T,
   if (TheTriple.isOSBinFormatMachO())
     return new DarwinAArch64AsmBackend(T, MRI);
 
-  if (TheTriple.isOSBinFormatCOFF())
-    return new COFFAArch64AsmBackend(T, TheTriple);
-
-  assert(TheTriple.isOSBinFormatELF() && "Invalid target");
-
+  assert(TheTriple.isOSBinFormatELF() && "Expect either MachO or ELF target");
   uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TheTriple.getOS());
   bool IsILP32 = Options.getABIName() == "ilp32";
   return new ELFAArch64AsmBackend(T, OSABI, /*IsLittleEndian=*/true, IsILP32);

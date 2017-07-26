@@ -72,11 +72,6 @@ void AMDGPUInstPrinter::printU16ImmDecOperand(const MCInst *MI, unsigned OpNo,
   O << formatDec(MI->getOperand(OpNo).getImm() & 0xffff);
 }
 
-void AMDGPUInstPrinter::printS16ImmDecOperand(const MCInst *MI, unsigned OpNo,
-                                              raw_ostream &O) {
-  O << formatDec(static_cast<int16_t>(MI->getOperand(OpNo).getImm()));
-}
-
 void AMDGPUInstPrinter::printU32ImmOperand(const MCInst *MI, unsigned OpNo,
                                            const MCSubtargetInfo &STI,
                                            raw_ostream &O) {
@@ -120,16 +115,6 @@ void AMDGPUInstPrinter::printOffset(const MCInst *MI, unsigned OpNo,
   if (Imm != 0) {
     O << ((OpNo == 0)? "offset:" : " offset:");
     printU16ImmDecOperand(MI, OpNo, O);
-  }
-}
-
-void AMDGPUInstPrinter::printOffsetS13(const MCInst *MI, unsigned OpNo,
-                                       const MCSubtargetInfo &STI,
-                                       raw_ostream &O) {
-  uint16_t Imm = MI->getOperand(OpNo).getImm();
-  if (Imm != 0) {
-    O << ((OpNo == 0)? "offset:" : " offset:");
-    printS16ImmDecOperand(MI, OpNo, O);
   }
 }
 
@@ -229,24 +214,6 @@ void AMDGPUInstPrinter::printExpVM(const MCInst *MI, unsigned OpNo,
                                    raw_ostream &O) {
   if (MI->getOperand(OpNo).getImm())
     O << " vm";
-}
-
-void AMDGPUInstPrinter::printDFMT(const MCInst *MI, unsigned OpNo,
-                                  const MCSubtargetInfo &STI,
-                                  raw_ostream &O) {
-  if (MI->getOperand(OpNo).getImm()) {
-    O << " dfmt:";
-    printU8ImmDecOperand(MI, OpNo, O);
-  }
-}
-
-void AMDGPUInstPrinter::printNFMT(const MCInst *MI, unsigned OpNo,
-                                  const MCSubtargetInfo &STI,
-                                  raw_ostream &O) {
-  if (MI->getOperand(OpNo).getImm()) {
-    O << " nfmt:";
-    printU8ImmDecOperand(MI, OpNo, O);
-  }
 }
 
 void AMDGPUInstPrinter::printRegOperand(unsigned RegNo, raw_ostream &O,
@@ -412,6 +379,7 @@ void AMDGPUInstPrinter::printImmediateV216(uint32_t Imm,
                                            const MCSubtargetInfo &STI,
                                            raw_ostream &O) {
   uint16_t Lo16 = static_cast<uint16_t>(Imm);
+  assert(Lo16 == static_cast<uint16_t>(Imm >> 16));
   printImmediate16(Lo16, STI, O);
 }
 

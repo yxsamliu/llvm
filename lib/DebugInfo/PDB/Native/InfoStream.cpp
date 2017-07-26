@@ -57,10 +57,6 @@ Error InfoStream::reload() {
   uint32_t NewOffset = Reader.getOffset();
   NamedStreamMapByteSize = NewOffset - Offset;
 
-  Reader.setOffset(Offset);
-  if (auto EC = Reader.readSubstream(SubNamedStreams, NamedStreamMapByteSize))
-    return EC;
-
   bool Stop = false;
   while (!Stop && !Reader.empty()) {
     PdbRaw_FeatureSig Sig;
@@ -132,8 +128,4 @@ ArrayRef<PdbRaw_FeatureSig> InfoStream::getFeatureSignatures() const {
 
 const NamedStreamMap &InfoStream::getNamedStreams() const {
   return NamedStreams;
-}
-
-BinarySubstreamRef InfoStream::getNamedStreamsBuffer() const {
-  return SubNamedStreams;
 }

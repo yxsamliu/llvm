@@ -221,8 +221,7 @@ public:
     return true;
   }
 
-  void getUnrollingPreferences(Loop *, ScalarEvolution &,
-                               TTI::UnrollingPreferences &) {}
+  void getUnrollingPreferences(Loop *, TTI::UnrollingPreferences &) {}
 
   bool isLegalAddImmediate(int64_t Imm) { return false; }
 
@@ -689,14 +688,14 @@ public:
     return static_cast<T *>(this)->getIntrinsicCost(IID, RetTy, ParamTys);
   }
 
-  unsigned getUserCost(const User *U, ArrayRef<const Value *> Operands) {
+  unsigned getUserCost(const User *U) {
     if (isa<PHINode>(U))
       return TTI::TCC_Free; // Model all PHI nodes as free.
 
     if (const GEPOperator *GEP = dyn_cast<GEPOperator>(U)) {
-      return static_cast<T *>(this)->getGEPCost(GEP->getSourceElementType(),
-                                                GEP->getPointerOperand(),
-                                                Operands.drop_front());
+      SmallVector<Value *, 4> Indices(GEP->idx_begin(), GEP->idx_end());
+      return static_cast<T *>(this)->getGEPCost(
+          GEP->getSourceElementType(), GEP->getPointerOperand(), Indices);
     }
 
     if (auto CS = ImmutableCallSite(U)) {

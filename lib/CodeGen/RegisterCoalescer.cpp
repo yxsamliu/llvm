@@ -979,11 +979,6 @@ bool RegisterCoalescer::removePartialRedundancy(const CoalescerPair &CP,
     IntB.createDeadDef(NewCopyIdx, LIS->getVNInfoAllocator());
     for (LiveInterval::SubRange &SR : IntB.subranges())
       SR.createDeadDef(NewCopyIdx, LIS->getVNInfoAllocator());
-
-    // If the newly created Instruction has an address of an instruction that was
-    // deleted before (object recycled by the allocator) it needs to be removed from
-    // the deleted list.
-    ErasedInstrs.erase(NewCopyMI);
   } else {
     DEBUG(dbgs() << "\tremovePartialRedundancy: Remove the copy from BB#"
                  << MBB.getNumber() << '\t' << CopyMI);
@@ -994,8 +989,6 @@ bool RegisterCoalescer::removePartialRedundancy(const CoalescerPair &CP,
   // While updating the live-ranges, we only look at slot indices and
   // never go back to the instruction.
   LIS->RemoveMachineInstrFromMaps(CopyMI);
-  // Mark instructions as deleted.
-  ErasedInstrs.insert(&CopyMI);
   CopyMI.eraseFromParent();
 
   // Update the liveness.
@@ -3102,7 +3095,7 @@ copyCoalesceWorkList(MutableArrayRef<MachineInstr*> CurrList) {
       continue;
     // Skip instruction pointers that have already been erased, for example by
     // dead code elimination.
-    if (ErasedInstrs.count(CurrList[i])) {
+    if (ErasedInstrs.erase(CurrList[i])) {
       CurrList[i] = nullptr;
       continue;
     }

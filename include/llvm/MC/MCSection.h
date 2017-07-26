@@ -167,7 +167,7 @@ public:
 
   MCSection::iterator getSubsectionInsertionPoint(unsigned Subsection);
 
-  void dump() const;
+  void dump();
 
   virtual void PrintSwitchToSection(const MCAsmInfo &MAI, const Triple &T,
                                     raw_ostream &OS,

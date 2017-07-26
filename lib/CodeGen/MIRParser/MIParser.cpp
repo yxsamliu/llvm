@@ -579,12 +579,12 @@ bool MIParser::parseBasicBlock(MachineBasicBlock &MBB,
   //
   // is equivalent to
   //   liveins: %edi, %esi
-  bool ExplicitSuccessors = false;
+  bool ExplicitSuccesors = false;
   while (true) {
     if (Token.is(MIToken::kw_successors)) {
       if (parseBasicBlockSuccessors(MBB))
         return true;
-      ExplicitSuccessors = true;
+      ExplicitSuccesors = true;
     } else if (Token.is(MIToken::kw_liveins)) {
       if (parseBasicBlockLiveins(MBB))
         return true;
@@ -636,7 +636,7 @@ bool MIParser::parseBasicBlock(MachineBasicBlock &MBB,
   }
 
   // Construct successor list by searching for basic block machine operands.
-  if (!ExplicitSuccessors) {
+  if (!ExplicitSuccesors) {
     SmallVector<MachineBasicBlock*,4> Successors;
     bool IsFallthrough;
     guessSuccessors(MBB, Successors, IsFallthrough);

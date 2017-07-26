@@ -13,7 +13,6 @@
 #include "llvm/Config/config.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/Program.h"
 #include "llvm/Support/StringSaver.h"
 #include "gtest/gtest.h"
 #include <fstream>
@@ -545,11 +544,6 @@ TEST(CommandLineTest, GetRegisteredSubcommands) {
       EXPECT_EQ("sc2", S->getName());
     }
   }
-}
-
-TEST(CommandLineTest, ArgumentLimit) {
-  std::string args(32 * 4096, 'a');
-  EXPECT_FALSE(llvm::sys::commandLineFitsWithinSystemLimits("cl", args.data()));
 }
 
 TEST(CommandLineTest, ResponseFiles) {

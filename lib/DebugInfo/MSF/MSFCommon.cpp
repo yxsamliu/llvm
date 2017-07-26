@@ -1,4 +1,4 @@
-//===- MSFCommon.cpp - Common types and functions for MSF files -----------===//
+//===- MSFCommon.cpp - Common types and functions for MSF files -*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -9,10 +9,6 @@
 
 #include "llvm/DebugInfo/MSF/MSFCommon.h"
 #include "llvm/DebugInfo/MSF/MSFError.h"
-#include "llvm/Support/Endian.h"
-#include "llvm/Support/Error.h"
-#include <cstdint>
-#include <cstring>
 
 using namespace llvm;
 using namespace llvm::msf;

@@ -25,7 +25,6 @@
 #include "llvm/Analysis/Loads.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
-#include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LLVMContext.h"
@@ -577,12 +576,7 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessors(
   // Handle compare with phi operand, where the PHI is defined in this block.
   if (CmpInst *Cmp = dyn_cast<CmpInst>(I)) {
     assert(Preference == WantInteger && "Compares only produce integers");
-    Type *CmpType = Cmp->getType();
-    Value *CmpLHS = Cmp->getOperand(0);
-    Value *CmpRHS = Cmp->getOperand(1);
-    CmpInst::Predicate Pred = Cmp->getPredicate();
-
-    PHINode *PN = dyn_cast<PHINode>(CmpLHS);
+    PHINode *PN = dyn_cast<PHINode>(Cmp->getOperand(0));
     if (PN && PN->getParent() == BB) {
       const DataLayout &DL = PN->getModule()->getDataLayout();
       // We can do this simplification if any comparisons fold to true or false.
@@ -590,15 +584,15 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessors(
       for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
         BasicBlock *PredBB = PN->getIncomingBlock(i);
         Value *LHS = PN->getIncomingValue(i);
-        Value *RHS = CmpRHS->DoPHITranslation(BB, PredBB);
+        Value *RHS = Cmp->getOperand(1)->DoPHITranslation(BB, PredBB);
 
-        Value *Res = SimplifyCmpInst(Pred, LHS, RHS, {DL});
+        Value *Res = SimplifyCmpInst(Cmp->getPredicate(), LHS, RHS, {DL});
         if (!Res) {
           if (!isa<Constant>(RHS))
             continue;
 
           LazyValueInfo::Tristate
-            ResT = LVI->getPredicateOnEdge(Pred, LHS,
+            ResT = LVI->getPredicateOnEdge(Cmp->getPredicate(), LHS,
                                            cast<Constant>(RHS), PredBB, BB,
                                            CxtI ? CxtI : Cmp);
           if (ResT == LazyValueInfo::Unknown)
@@ -615,65 +609,25 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessors(
 
     // If comparing a live-in value against a constant, see if we know the
     // live-in value on any predecessors.
-    if (isa<Constant>(CmpRHS) && !CmpType->isVectorTy()) {
-      Constant *CmpConst = cast<Constant>(CmpRHS);
+    if (isa<Constant>(Cmp->getOperand(1)) && !Cmp->getType()->isVectorTy()) {
+      Constant *CmpConst = cast<Constant>(Cmp->getOperand(1));
 
-      if (!isa<Instruction>(CmpLHS) ||
-          cast<Instruction>(CmpLHS)->getParent() != BB) {
+      if (!isa<Instruction>(Cmp->getOperand(0)) ||
+          cast<Instruction>(Cmp->getOperand(0))->getParent() != BB) {
         for (BasicBlock *P : predecessors(BB)) {
           // If the value is known by LazyValueInfo to be a constant in a
           // predecessor, use that information to try to thread this block.
           LazyValueInfo::Tristate Res =
-            LVI->getPredicateOnEdge(Pred, CmpLHS,
+            LVI->getPredicateOnEdge(Cmp->getPredicate(), Cmp->getOperand(0),
                                     CmpConst, P, BB, CxtI ? CxtI : Cmp);
           if (Res == LazyValueInfo::Unknown)
             continue;
 
-          Constant *ResC = ConstantInt::get(CmpType, Res);
+          Constant *ResC = ConstantInt::get(Cmp->getType(), Res);
           Result.push_back(std::make_pair(ResC, P));
         }
 
         return !Result.empty();
-      }
-
-      // InstCombine can fold some forms of constant range checks into
-      // (icmp (add (x, C1)), C2). See if we have we have such a thing with
-      // x as a live-in.
-      {
-        using namespace PatternMatch;
-        Value *AddLHS;
-        ConstantInt *AddConst;
-        if (isa<ConstantInt>(CmpConst) &&
-            match(CmpLHS, m_Add(m_Value(AddLHS), m_ConstantInt(AddConst)))) {
-          if (!isa<Instruction>(AddLHS) ||
-              cast<Instruction>(AddLHS)->getParent() != BB) {
-            for (BasicBlock *P : predecessors(BB)) {
-              // If the value is known by LazyValueInfo to be a ConstantRange in
-              // a predecessor, use that information to try to thread this
-              // block.
-              ConstantRange CR = LVI->getConstantRangeOnEdge(
-                  AddLHS, P, BB, CxtI ? CxtI : cast<Instruction>(CmpLHS));
-              // Propagate the range through the addition.
-              CR = CR.add(AddConst->getValue());
-
-              // Get the range where the compare returns true.
-              ConstantRange CmpRange = ConstantRange::makeExactICmpRegion(
-                  Pred, cast<ConstantInt>(CmpConst)->getValue());
-
-              Constant *ResC;
-              if (CmpRange.contains(CR))
-                ResC = ConstantInt::getTrue(CmpType);
-              else if (CmpRange.inverse().contains(CR))
-                ResC = ConstantInt::getFalse(CmpType);
-              else
-                continue;
-
-              Result.push_back(std::make_pair(ResC, P));
-            }
-
-            return !Result.empty();
-          }
-        }
       }
 
       // Try to find a constant value for the LHS of a comparison,
@@ -684,7 +638,8 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessors(
 
       for (const auto &LHSVal : LHSVals) {
         Constant *V = LHSVal.first;
-        Constant *Folded = ConstantExpr::getCompare(Pred, V, CmpConst);
+        Constant *Folded = ConstantExpr::getCompare(Cmp->getPredicate(),
+                                                    V, CmpConst);
         if (Constant *KC = getKnownConstant(Folded, WantInteger))
           Result.push_back(std::make_pair(KC, LHSVal.second));
       }

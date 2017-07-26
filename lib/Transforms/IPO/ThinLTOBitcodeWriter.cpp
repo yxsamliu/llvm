@@ -371,7 +371,6 @@ void splitAndWriteThinLTOBitcode(
                 /*GenerateHash=*/true, &ModHash);
   W.writeModule(MergedM.get(), /*ShouldPreserveUseListOrder=*/false,
                 &MergedMIndex);
-  W.writeSymtab();
   W.writeStrtab();
   OS << Buffer;
 
@@ -386,7 +385,6 @@ void splitAndWriteThinLTOBitcode(
                    /*GenerateHash=*/false, &ModHash);
     W2.writeModule(MergedM.get(), /*ShouldPreserveUseListOrder=*/false,
                    &MergedMIndex);
-    W2.writeSymtab();
     W2.writeStrtab();
     *ThinLinkOS << Buffer;
   }

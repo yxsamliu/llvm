@@ -1,4 +1,4 @@
-//===- YAMLParser.cpp - Simple YAML parser --------------------------------===//
+//===--- YAMLParser.cpp - Simple YAML parser ------------------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -13,29 +13,15 @@
 
 #include "llvm/Support/YAMLParser.h"
 #include "llvm/ADT/AllocatorList.h"
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/None.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/SMLoc.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
-#include <map>
-#include <memory>
-#include <string>
-#include <system_error>
-#include <utility>
 
 using namespace llvm;
 using namespace yaml;
@@ -51,7 +37,7 @@ enum UnicodeEncodingForm {
 
 /// EncodingInfo - Holds the encoding type and length of the byte order mark if
 ///                it exists. Length is in {0, 2, 3, 4}.
-using EncodingInfo = std::pair<UnicodeEncodingForm, unsigned>;
+typedef std::pair<UnicodeEncodingForm, unsigned> EncodingInfo;
 
 /// getUnicodeEncoding - Reads up to the first 4 bytes to determine the Unicode
 ///                      encoding form of \a Input.
@@ -60,7 +46,7 @@ using EncodingInfo = std::pair<UnicodeEncodingForm, unsigned>;
 /// @returns An EncodingInfo indicating the Unicode encoding form of the input
 ///          and how long the byte order mark is if one exists.
 static EncodingInfo getUnicodeEncoding(StringRef Input) {
-  if (Input.empty())
+  if (Input.size() == 0)
     return std::make_pair(UEF_Unknown, 0);
 
   switch (uint8_t(Input[0])) {
@@ -109,6 +95,8 @@ static EncodingInfo getUnicodeEncoding(StringRef Input) {
   return std::make_pair(UEF_UTF8, 0);
 }
 
+namespace llvm {
+namespace yaml {
 /// Pin the vtables to this file.
 void Node::anchor() {}
 void NullNode::anchor() {}
@@ -118,9 +106,6 @@ void KeyValueNode::anchor() {}
 void MappingNode::anchor() {}
 void SequenceNode::anchor() {}
 void AliasNode::anchor() {}
-
-namespace llvm {
-namespace yaml {
 
 /// Token - A single YAML token.
 struct Token {
@@ -148,7 +133,7 @@ struct Token {
     TK_Alias,
     TK_Anchor,
     TK_Tag
-  } Kind = TK_Error;
+  } Kind;
 
   /// A string of length 0 or more whose begin() points to the logical location
   /// of the token in the input.
@@ -157,16 +142,14 @@ struct Token {
   /// The value of a block scalar node.
   std::string Value;
 
-  Token() = default;
+  Token() : Kind(TK_Error) {}
 };
+}
+}
 
-} // end namespace yaml
-} // end namespace llvm
-
-using TokenQueueT = BumpPtrList<Token>;
+typedef llvm::BumpPtrList<Token> TokenQueueT;
 
 namespace {
-
 /// @brief This struct is used to track simple keys.
 ///
 /// Simple keys are handled by creating an entry in SimpleKeys for each Token
@@ -187,13 +170,12 @@ struct SimpleKey {
     return Tok == Other.Tok;
   }
 };
-
-} // end anonymous namespace
+}
 
 /// @brief The Unicode scalar value of a UTF-8 minimal well-formed code unit
 ///        subsequence and the subsequence's length in code units (uint8_t).
 ///        A length of 0 represents an error.
-using UTF8Decoded = std::pair<uint32_t, unsigned>;
+typedef std::pair<uint32_t, unsigned> UTF8Decoded;
 
 static UTF8Decoded decodeUTF8(StringRef Range) {
   StringRef::iterator Position= Range.begin();
@@ -247,7 +229,6 @@ static UTF8Decoded decodeUTF8(StringRef Range) {
 
 namespace llvm {
 namespace yaml {
-
 /// @brief Scans YAML tokens from a MemoryBuffer.
 class Scanner {
 public:
@@ -369,8 +350,7 @@ private:
   ///          ns-char.
   StringRef::iterator skip_ns_char(StringRef::iterator Position);
 
-  using SkipWhileFunc = StringRef::iterator (Scanner::*)(StringRef::iterator);
-
+  typedef StringRef::iterator (Scanner::*SkipWhileFunc)(StringRef::iterator);
   /// @brief Skip minimal well-formed code unit subsequences until Func
   ///        returns its input.
   ///
@@ -675,10 +655,10 @@ bool yaml::dumpTokens(StringRef Input, raw_ostream &OS) {
 }
 
 bool yaml::scanTokens(StringRef Input) {
-  SourceMgr SM;
-  Scanner scanner(Input, SM);
-  while (true) {
-    Token T = scanner.getNext();
+  llvm::SourceMgr SM;
+  llvm::yaml::Scanner scanner(Input, SM);
+  for (;;) {
+    llvm::yaml::Token T = scanner.getNext();
     if (T.Kind == Token::TK_StreamEnd)
       break;
     else if (T.Kind == Token::TK_Error)
@@ -1764,7 +1744,7 @@ Stream::Stream(MemoryBufferRef InputBuffer, SourceMgr &SM, bool ShowColors,
                std::error_code *EC)
     : scanner(new Scanner(InputBuffer, SM, ShowColors, EC)), CurrentDoc() {}
 
-Stream::~Stream() = default;
+Stream::~Stream() {}
 
 bool Stream::failed() { return scanner->failed(); }
 
@@ -1870,6 +1850,8 @@ void Node::setError(const Twine &Msg, Token &Tok) const {
 bool Node::failed() const {
   return Doc->failed();
 }
+
+
 
 StringRef ScalarNode::getValue(SmallVectorImpl<char> &Storage) const {
   // TODO: Handle newlines properly. We need to remove leading whitespace.
