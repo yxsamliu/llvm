@@ -120,7 +120,7 @@ void EraseNonkernels::getAnalysisUsage(AnalysisUsage& AU) const
 static bool IsCalledByKernel(Function *F, FunctionMap &FuncCalledByKernel) {
   auto Loc = FuncCalledByKernel.find(F);
   if (Loc != FuncCalledByKernel.end())
-    return FuncCalledByKernel[F];
+    return true;
   for (auto I:F->users()) {
     CallSite CS(I);
     if (CS && IsCalledByKernel(CS.getCaller(), FuncCalledByKernel)) {
