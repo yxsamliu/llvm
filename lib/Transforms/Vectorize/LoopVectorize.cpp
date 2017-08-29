@@ -1244,7 +1244,7 @@ private:
 /// for example 'force', means a decision has been made. So, we need to be
 /// careful NOT to add them if the user hasn't specifically asked so.
 class LoopVectorizeHints {
-  enum HintKind { HK_WIDTH, HK_UNROLL, HK_FORCE };
+  enum HintKind { HK_WIDTH, HK_UNROLL, HK_FORCE, HK_ISVECTORIZED };
 
   /// Hint - associates name and validation with the hint value.
   struct Hint {
@@ -1263,6 +1263,8 @@ class LoopVectorizeHints {
         return isPowerOf2_32(Val) && Val <= MaxInterleaveFactor;
       case HK_FORCE:
         return (Val <= 1);
+      case HK_ISVECTORIZED:
+        return (Val==0 || Val==1);
       }
       return false;
     }
@@ -1275,6 +1277,8 @@ class LoopVectorizeHints {
   /// Vectorization forced
   Hint Force;
 
+  /// Already Vectorized
+  Hint IsVectorized;
   /// Return the loop metadata prefix.
   static StringRef Prefix() { return "llvm.loop."; }
 
@@ -1294,6 +1298,7 @@ public:
               HK_WIDTH),
         Interleave("interleave.count", DisableInterleaving, HK_UNROLL),
         Force("vectorize.enable", FK_Undefined, HK_FORCE),
+        IsVectorized("isvectorized", 0, HK_ISVECTORIZED),
         PotentiallyUnsafe(false), TheLoop(L), ORE(ORE) {
     // Populate values with existing loop metadata.
     getHintsFromMetadata();
@@ -1302,14 +1307,19 @@ public:
     if (VectorizerParams::isInterleaveForced())
       Interleave.Value = VectorizerParams::VectorizationInterleave;
 
+    if (IsVectorized.Value != 1)
+      // If the vectorization width and interleaving count are both 1 then
+      // consider the loop to have been already vectorized because there's
+      // nothing more that we can do.
+      IsVectorized.Value = Width.Value == 1 && Interleave.Value == 1;
     DEBUG(if (DisableInterleaving && Interleave.Value == 1) dbgs()
           << "LV: Interleaving disabled by the pass manager\n");
   }
 
   /// Mark the loop L as already vectorized by setting the width to 1.
   void setAlreadyVectorized() {
-    Width.Value = Interleave.Value = 1;
-    Hint Hints[] = {Width, Interleave};
+    IsVectorized.Value = 1;
+    Hint Hints[] = {IsVectorized};
     writeHintsToMetadata(Hints);
   }
 
@@ -1326,9 +1336,7 @@ public:
       return false;
     }
 
-    if (getWidth() == 1 && getInterleave() == 1) {
-      // FIXME: Add a separate metadata to indicate when the loop has already
-      // been vectorized instead of setting width and count to 1.
+    if (getIsVectorized() == 1) {
       DEBUG(dbgs() << "LV: Not vectorizing: Disabled/already vectorized.\n");
       // FIXME: Add interleave.disable metadata. This will allow
       // vectorize.disable to be used without disabling the pass and errors
@@ -1337,8 +1345,8 @@ public:
                                           "AllDisabled", L->getStartLoc(),
                                           L->getHeader())
                << "loop not vectorized: vectorization and interleaving are "
-                  "explicitly disabled, or vectorize width and interleave "
-                  "count are both set to 1");
+                  "explicitly disabled, or the loop has already been "
+                  "vectorized");
       return false;
     }
 
@@ -1371,6 +1379,7 @@ public:
 
   unsigned getWidth() const { return Width.Value; }
   unsigned getInterleave() const { return Interleave.Value; }
+  unsigned getIsVectorized() const { return IsVectorized.Value; }
   enum ForceKind getForce() const { return (ForceKind)Force.Value; }
 
   /// \brief If hints are provided that force vectorization, use the AlwaysPrint
@@ -1454,7 +1463,7 @@ private:
       return;
     unsigned Val = C->getZExtValue();
 
-    Hint *Hints[] = {&Width, &Interleave, &Force};
+    Hint *Hints[] = {&Width, &Interleave, &Force, &IsVectorized};
     for (auto H : Hints) {
       if (Name == H->Name) {
         if (H->validate(Val))
@@ -3045,13 +3054,14 @@ void InnerLoopVectorizer::vectorizeMemoryInstruction(Instruction *Instr) {
               Builder.CreateGEP(nullptr, Ptr, Builder.getInt32(-Part * VF));
           PartPtr =
               Builder.CreateGEP(nullptr, PartPtr, Builder.getInt32(1 - VF));
-          Mask[Part] = reverseVector(Mask[Part]);
+          if (Mask[Part]) // The reverse of a null all-one mask is a null mask.
+            Mask[Part] = reverseVector(Mask[Part]);
         }
 
         Value *VecPtr =
             Builder.CreateBitCast(PartPtr, DataTy->getPointerTo(AddressSpace));
 
-        if (Legal->isMaskRequired(SI))
+        if (Legal->isMaskRequired(SI) && Mask[Part])
           NewSI = Builder.CreateMaskedStore(StoredVal, VecPtr, Alignment,
                                             Mask[Part]);
         else
@@ -3083,12 +3093,13 @@ void InnerLoopVectorizer::vectorizeMemoryInstruction(Instruction *Instr) {
         // wide load needs to start at the last vector element.
         PartPtr = Builder.CreateGEP(nullptr, Ptr, Builder.getInt32(-Part * VF));
         PartPtr = Builder.CreateGEP(nullptr, PartPtr, Builder.getInt32(1 - VF));
-        Mask[Part] = reverseVector(Mask[Part]);
+        if (Mask[Part]) // The reverse of a null all-one mask is a null mask.
+          Mask[Part] = reverseVector(Mask[Part]);
       }
 
       Value *VecPtr =
           Builder.CreateBitCast(PartPtr, DataTy->getPointerTo(AddressSpace));
-      if (Legal->isMaskRequired(LI))
+      if (Legal->isMaskRequired(LI) && Mask[Part])
         NewLI = Builder.CreateMaskedLoad(VecPtr, Alignment, Mask[Part],
                                          UndefValue::get(DataTy),
                                          "wide.masked.load");
@@ -3136,10 +3147,10 @@ void InnerLoopVectorizer::scalarizeInstruction(Instruction *Instr,
       Value *Cmp = nullptr;
       if (IfPredicateInstr) {
         Cmp = Cond[Part];
-        if (Cmp->getType()->isVectorTy())
+        if (!Cmp) // Block in mask is all-one.
+          Cmp = Builder.getTrue();
+        else if (Cmp->getType()->isVectorTy())
           Cmp = Builder.CreateExtractElement(Cmp, Builder.getInt32(Lane));
-        Cmp = Builder.CreateICmp(ICmpInst::ICMP_EQ, Cmp,
-                                 ConstantInt::get(Cmp->getType(), 1));
       }
 
       Instruction *Cloned = Instr->clone();
@@ -4518,24 +4529,22 @@ InnerLoopVectorizer::createEdgeMask(BasicBlock *Src, BasicBlock *Dst) {
   BranchInst *BI = dyn_cast<BranchInst>(Src->getTerminator());
   assert(BI && "Unexpected terminator found");
 
-  if (BI->isConditional()) {
+  if (!BI->isConditional())
+    return EdgeMaskCache[Edge] = SrcMask;
 
-    VectorParts EdgeMask(UF);
-    for (unsigned Part = 0; Part < UF; ++Part) {
-      auto *EdgeMaskPart = getOrCreateVectorValue(BI->getCondition(), Part);
-      if (BI->getSuccessor(0) != Dst)
-        EdgeMaskPart = Builder.CreateNot(EdgeMaskPart);
+  VectorParts EdgeMask(UF);
+  for (unsigned Part = 0; Part < UF; ++Part) {
+    auto *EdgeMaskPart = getOrCreateVectorValue(BI->getCondition(), Part);
+    if (BI->getSuccessor(0) != Dst)
+      EdgeMaskPart = Builder.CreateNot(EdgeMaskPart);
 
+    if (SrcMask[Part]) // Otherwise block in-mask is all-one, no need to AND.
       EdgeMaskPart = Builder.CreateAnd(EdgeMaskPart, SrcMask[Part]);
-      EdgeMask[Part] = EdgeMaskPart;
-    }
 
-    EdgeMaskCache[Edge] = EdgeMask;
-    return EdgeMask;
+    EdgeMask[Part] = EdgeMaskPart;
   }
 
-  EdgeMaskCache[Edge] = SrcMask;
-  return SrcMask;
+  return EdgeMaskCache[Edge] = EdgeMask;
 }
 
 InnerLoopVectorizer::VectorParts
@@ -4547,31 +4556,32 @@ InnerLoopVectorizer::createBlockInMask(BasicBlock *BB) {
   if (BCEntryIt != BlockMaskCache.end())
     return BCEntryIt->second;
 
+  // All-one mask is modelled as no-mask following the convention for masked
+  // load/store/gather/scatter. Initialize BlockMask to no-mask.
   VectorParts BlockMask(UF);
+  for (unsigned Part = 0; Part < UF; ++Part)
+    BlockMask[Part] = nullptr;
 
   // Loop incoming mask is all-one.
-  if (OrigLoop->getHeader() == BB) {
-    Value *C = ConstantInt::get(IntegerType::getInt1Ty(BB->getContext()), 1);
+  if (OrigLoop->getHeader() == BB)
+    return BlockMaskCache[BB] = BlockMask;
+
+  // This is the block mask. We OR all incoming edges.
+  for (auto *Predecessor : predecessors(BB)) {
+    VectorParts EdgeMask = createEdgeMask(Predecessor, BB);
+    if (!EdgeMask[0]) // Mask of predecessor is all-one so mask of block is too.
+      return BlockMaskCache[BB] = EdgeMask;
+
+    if (!BlockMask[0]) { // BlockMask has its initialized nullptr value.
+      BlockMask = EdgeMask;
+      continue;
+    }
+
     for (unsigned Part = 0; Part < UF; ++Part)
-      BlockMask[Part] = getOrCreateVectorValue(C, Part);
-    BlockMaskCache[BB] = BlockMask;
-    return BlockMask;
+      BlockMask[Part] = Builder.CreateOr(BlockMask[Part], EdgeMask[Part]);
   }
 
-  // This is the block mask. We OR all incoming edges, and with zero.
-  Value *Zero = ConstantInt::get(IntegerType::getInt1Ty(BB->getContext()), 0);
-  for (unsigned Part = 0; Part < UF; ++Part)
-    BlockMask[Part] = getOrCreateVectorValue(Zero, Part);
-
-  // For each pred:
-  for (pred_iterator It = pred_begin(BB), E = pred_end(BB); It != E; ++It) {
-    VectorParts EM = createEdgeMask(*It, BB);
-    for (unsigned Part = 0; Part < UF; ++Part)
-      BlockMask[Part] = Builder.CreateOr(BlockMask[Part], EM[Part]);
-  }
-
-  BlockMaskCache[BB] = BlockMask;
-  return BlockMask;
+  return BlockMaskCache[BB] = BlockMask;
 }
 
 void InnerLoopVectorizer::widenPHIInstruction(Instruction *PN, unsigned UF,
@@ -4862,8 +4872,10 @@ void InnerLoopVectorizer::vectorizeInstruction(Instruction &I) {
       Value *B = getOrCreateVectorValue(Cmp->getOperand(1), Part);
       Value *C = nullptr;
       if (FCmp) {
+        // Propagate fast math flags.
+        IRBuilder<>::FastMathFlagGuard FMFG(Builder);
+        Builder.setFastMathFlags(Cmp->getFastMathFlags());
         C = Builder.CreateFCmp(Cmp->getPredicate(), A, B);
-        cast<FCmpInst>(C)->copyFastMathFlags(Cmp);
       } else {
         C = Builder.CreateICmp(Cmp->getPredicate(), A, B);
       }
@@ -6277,6 +6289,18 @@ Optional<unsigned> LoopVectorizationCostModel::computeMaxVF(bool OptForSize) {
     return None;
   }
 
+  if (Legal->getRuntimePointerChecking()->Need && TTI.hasBranchDivergence()) {
+    // TODO: It may by useful to do since it's still likely to be dynamically
+    // uniform if the target can skip.
+    DEBUG(dbgs() << "LV: Not inserting runtime ptr check for divergent target");
+
+    ORE->emit(
+      createMissedAnalysis("CantVersionLoopWithDivergentTarget")
+      << "runtime pointer checks needed. Not enabled for divergent target");
+
+    return None;
+  }
+
   if (!OptForSize) // Remaining checks deal with scalar loop when OptForSize.
     return computeFeasibleMaxVF(OptForSize);
 
@@ -7640,7 +7664,7 @@ void LoopVectorizationPlanner::executePlan(InnerLoopVectorizer &ILV) {
   // 2. Copy and widen instructions from the old loop into the new loop.
 
   // Move instructions to handle first-order recurrences.
-  DenseMap<Instruction *, Instruction *> SinkAfter = Legal->getSinkAfter();
+  DenseMap<Instruction *, Instruction *> &SinkAfter = Legal->getSinkAfter();
   for (auto &Entry : SinkAfter) {
     Entry.first->removeFromParent();
     Entry.first->insertAfter(Entry.second);

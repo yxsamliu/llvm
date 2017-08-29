@@ -268,8 +268,6 @@ public:
 
   bool LSRWithInstrQueries() { return false; }
 
-  bool isFoldableMemAccessOffset(Instruction *I, int64_t Offset) { return true; }
-
   bool isTruncateFree(Type *Ty1, Type *Ty2) { return false; }
 
   bool isProfitableToHoist(Instruction *I) { return true; }
@@ -429,10 +427,10 @@ public:
 
   unsigned getAddressComputationCost(Type *Tp, ScalarEvolution *,
                                      const SCEV *) {
-    return 0; 
+    return 0;
   }
 
-  unsigned getReductionCost(unsigned, Type *, bool) { return 1; }
+  unsigned getArithmeticReductionCost(unsigned, Type *, bool) { return 1; }
 
   unsigned getCostOfKeepingLiveOverCall(ArrayRef<Type *> Tys) { return 0; }
 
@@ -593,7 +591,7 @@ protected:
     APInt StrideVal = Step->getAPInt();
     if (StrideVal.getBitWidth() > 64)
       return false;
-    // FIXME: need to take absolute value for negtive stride case  
+    // FIXME: Need to take absolute value for negative stride case.
     return StrideVal.getSExtValue() < MergeDistance;
   }
 };
