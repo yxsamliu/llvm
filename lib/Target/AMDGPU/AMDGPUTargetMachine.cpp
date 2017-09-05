@@ -179,7 +179,6 @@ extern "C" void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUAAWrapperPassPass(*PR);
   initializeAMDGPUUseNativeCallsPass(*PR);
   initializeAMDGPUSimplifyLibCallsPass(*PR);
-  initializeAMDGPUConvertAtomicLibCallsPass(*PR);
   initializeAMDGPUOCL12AdapterPass(*PR);
   initializeAMDGPUPrintfRuntimeBindingPass(*PR);
   initializeAMDGPULowerKernelCallsPass(*PR);
@@ -318,7 +317,6 @@ StringRef AMDGPUTargetMachine::getFeatureString(const Function &F) const {
 }
 
 void AMDGPUTargetMachine::addPreLinkPasses(PassManagerBase & PM) {
-  PM.add(llvm::createAMDGPUConvertAtomicLibCallsPass());
   if (getTargetTriple().getEnvironment() != Triple::HCC)
     PM.add(llvm::createAMDGPUOCL12AdapterPass());
   PM.add(llvm::createAMDGPUPrintfRuntimeBinding());
