@@ -13963,7 +13963,10 @@ SDValue DAGCombiner::visitEXTRACT_VECTOR_ELT(SDNode *N) {
     // FIXME: We should handle recursing on other vector shuffles and
     // scalar_to_vector here as well.
 
-    if (!LegalOperations) {
+    if (!LegalOperations ||
+        // FIXME: Should really be just isOperationLegalOrCustom.
+        TLI.isOperationLegal(ISD::EXTRACT_VECTOR_ELT, VT) ||
+        TLI.isOperationExpand(ISD::VECTOR_SHUFFLE, VT)) {
       EVT IndexTy = TLI.getVectorIdxTy(DAG.getDataLayout());
       return DAG.getNode(ISD::EXTRACT_VECTOR_ELT, SDLoc(N), NVT, SVInVec,
                          DAG.getConstant(OrigElt, SDLoc(SVOp), IndexTy));
@@ -15180,8 +15183,9 @@ SDValue DAGCombiner::visitEXTRACT_SUBVECTOR(SDNode* N) {
         unsigned NumElems = ExtractSize / EltSize;
         EVT ExtractVT = EVT::getVectorVT(*DAG.getContext(),
                                          InVT.getVectorElementType(), NumElems);
-        if (!LegalOperations ||
-            TLI.isOperationLegal(ISD::BUILD_VECTOR, ExtractVT)) {
+        if ((!LegalOperations ||
+             TLI.isOperationLegal(ISD::BUILD_VECTOR, ExtractVT)) &&
+            (!LegalTypes || TLI.isTypeLegal(ExtractVT))) {
           unsigned IdxVal = (Idx->getZExtValue() * NVT.getScalarSizeInBits()) /
                             EltSize;
 
