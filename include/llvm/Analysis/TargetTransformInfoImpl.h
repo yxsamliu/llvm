@@ -744,6 +744,11 @@ public:
     if (isa<PHINode>(U))
       return TTI::TCC_Free; // Model all PHI nodes as free.
 
+    // Static alloca doesn't generate target instructions.
+    if (auto *A = dyn_cast<AllocaInst>(U))
+      if (A->isStaticAlloca())
+        return TTI::TCC_Free;
+
     if (const GEPOperator *GEP = dyn_cast<GEPOperator>(U)) {
       return static_cast<T *>(this)->getGEPCost(GEP->getSourceElementType(),
                                                 GEP->getPointerOperand(),
@@ -779,7 +784,9 @@ public:
   }
 
   int getInstructionLatency(const Instruction *I) {
-    if (isa<PHINode>(I))
+    SmallVector<const Value *, 4> Operands(I->value_op_begin(),
+                                           I->value_op_end());
+    if (getUserCost(I, Operands) == TTI::TCC_Free)
       return 0;
 
     if (isa<CallInst>(I))
