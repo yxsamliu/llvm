@@ -777,24 +777,26 @@ static void computeKnownBitsFromAssume(const Value *V, KnownBits &Known,
   if (Known.Zero.intersects(Known.One)) {
     Known.resetAll();
 
-    if (Q.ORE) {
-      auto *CxtI = const_cast<Instruction *>(Q.CxtI);
-      OptimizationRemarkAnalysis ORA("value-tracking", "BadAssumption", CxtI);
-      Q.ORE->emit(ORA << "Detected conflicting code assumptions. Program may "
-                         "have undefined behavior, or compiler may have "
-                         "internal error.");
-    }
+    if (Q.ORE)
+      Q.ORE->emit([&]() {
+        auto *CxtI = const_cast<Instruction *>(Q.CxtI);
+        return OptimizationRemarkAnalysis("value-tracking", "BadAssumption",
+                                          CxtI)
+               << "Detected conflicting code assumptions. Program may "
+                  "have undefined behavior, or compiler may have "
+                  "internal error.";
+      });
   }
 }
 
-// Compute known bits from a shift operator, including those with a
-// non-constant shift amount. Known is the outputs of this function. Known2 is a
-// pre-allocated temporary with the/ same bit width as Known. KZF and KOF are
-// operator-specific functors that, given the known-zero or known-one bits
-// respectively, and a shift amount, compute the implied known-zero or known-one
-// bits of the shift operator's result respectively for that shift amount. The
-// results from calling KZF and KOF are conservatively combined for all
-// permitted shift amounts.
+/// Compute known bits from a shift operator, including those with a
+/// non-constant shift amount. Known is the output of this function. Known2 is a
+/// pre-allocated temporary with the same bit width as Known. KZF and KOF are
+/// operator-specific functors that, given the known-zero or known-one bits
+/// respectively, and a shift amount, compute the implied known-zero or
+/// known-one bits of the shift operator's result respectively for that shift
+/// amount. The results from calling KZF and KOF are conservatively combined for
+/// all permitted shift amounts.
 static void computeKnownBitsFromShiftOperator(
     const Operator *I, KnownBits &Known, KnownBits &Known2,
     unsigned Depth, const Query &Q,
@@ -808,19 +810,20 @@ static void computeKnownBitsFromShiftOperator(
     computeKnownBits(I->getOperand(0), Known, Depth + 1, Q);
     Known.Zero = KZF(Known.Zero, ShiftAmt);
     Known.One  = KOF(Known.One, ShiftAmt);
-    // If there is conflict between Known.Zero and Known.One, this must be an
-    // overflowing left shift, so the shift result is undefined. Clear Known
-    // bits so that other code could propagate this undef.
-    if ((Known.Zero & Known.One) != 0)
-      Known.resetAll();
+    // If the known bits conflict, this must be an overflowing left shift, so
+    // the shift result is poison. We can return anything we want. Choose 0 for
+    // the best folding opportunity.
+    if (Known.hasConflict())
+      Known.setAllZero();
 
     return;
   }
 
   computeKnownBits(I->getOperand(1), Known, Depth + 1, Q);
 
-  // If the shift amount could be greater than or equal to the bit-width of the LHS, the
-  // value could be undef, so we don't know anything about it.
+  // If the shift amount could be greater than or equal to the bit-width of the
+  // LHS, the value could be poison, but bail out because the check below is
+  // expensive. TODO: Should we just carry on?
   if ((~Known.Zero).uge(BitWidth)) {
     Known.resetAll();
     return;
@@ -844,8 +847,7 @@ static void computeKnownBitsFromShiftOperator(
   // Early exit if we can't constrain any well-defined shift amount.
   if (!(ShiftAmtKZ & (PowerOf2Ceil(BitWidth) - 1)) &&
       !(ShiftAmtKO & (PowerOf2Ceil(BitWidth) - 1))) {
-    ShifterOperandIsNonZero =
-        isKnownNonZero(I->getOperand(1), Depth + 1, Q);
+    ShifterOperandIsNonZero = isKnownNonZero(I->getOperand(1), Depth + 1, Q);
     if (!*ShifterOperandIsNonZero)
       return;
   }
@@ -876,13 +878,10 @@ static void computeKnownBitsFromShiftOperator(
     Known.One  &= KOF(Known2.One, ShiftAmt);
   }
 
-  // If there are no compatible shift amounts, then we've proven that the shift
-  // amount must be >= the BitWidth, and the result is undefined. We could
-  // return anything we'd like, but we need to make sure the sets of known bits
-  // stay disjoint (it should be better for some other code to actually
-  // propagate the undef than to pick a value here using known bits).
-  if (Known.Zero.intersects(Known.One))
-    Known.resetAll();
+  // If the known bits conflict, the result is poison. Return a 0 and hope the
+  // caller can further optimize that.
+  if (Known.hasConflict())
+    Known.setAllZero();
 }
 
 static void computeKnownBitsFromOperator(const Operator *I, KnownBits &Known,
@@ -1095,7 +1094,7 @@ static void computeKnownBitsFromOperator(const Operator *I, KnownBits &Known,
     break;
   }
   case Instruction::LShr: {
-    // (ushr X, C1) & C2 == 0   iff  (-1 >> C1) & C2 == 0
+    // (lshr X, C1) & C2 == 0   iff  (-1 >> C1) & C2 == 0
     auto KZF = [](const APInt &KnownZero, unsigned ShiftAmt) {
       APInt KZResult = KnownZero.lshr(ShiftAmt);
       // High bits known zero.
@@ -3428,7 +3427,8 @@ static const Value *getUnderlyingObjectFromInt(const Value *V) {
 
 /// This is a wrapper around GetUnderlyingObjects and adds support for basic
 /// ptrtoint+arithmetic+inttoptr sequences.
-void llvm::getUnderlyingObjectsForCodeGen(const Value *V,
+/// It returns false if unidentified object is found in GetUnderlyingObjects.
+bool llvm::getUnderlyingObjectsForCodeGen(const Value *V,
                           SmallVectorImpl<Value *> &Objects,
                           const DataLayout &DL) {
   SmallPtrSet<const Value *, 16> Visited;
@@ -3454,11 +3454,12 @@ void llvm::getUnderlyingObjectsForCodeGen(const Value *V,
       // getUnderlyingObjectsForCodeGen also fails for safety.
       if (!isIdentifiedObject(V)) {
         Objects.clear();
-        return;
+        return false;
       }
       Objects.push_back(const_cast<Value *>(V));
     }
   } while (!Working.empty());
+  return true;
 }
 
 /// Return true if the only users of this pointer are lifetime markers.
@@ -4082,6 +4083,14 @@ static SelectPatternResult matchMinMax(CmpInst::Predicate Pred,
                                        Value *CmpLHS, Value *CmpRHS,
                                        Value *TrueVal, Value *FalseVal,
                                        Value *&LHS, Value *&RHS) {
+  assert(!ICmpInst::isEquality(Pred) && "Expected not equality predicate only!");
+
+  // First, check if select has inverse order of what we will check below:
+  if (CmpRHS == FalseVal) {
+    std::swap(TrueVal, FalseVal);
+    Pred = CmpInst::getInversePredicate(Pred);
+  }
+
   // Assume success. If there's no match, callers should not use these anyway.
   LHS = TrueVal;
   RHS = FalseVal;
@@ -4094,26 +4103,30 @@ static SelectPatternResult matchMinMax(CmpInst::Predicate Pred,
 
     // (X <s C1) ? C1 : SMIN(X, C2) ==> SMAX(SMIN(X, C2), C1)
     if (match(FalseVal, m_SMin(m_Specific(CmpLHS), m_APInt(C2))) &&
-        C1->slt(*C2) && Pred == CmpInst::ICMP_SLT)
+        C1->slt(*C2) &&
+        (Pred == CmpInst::ICMP_SLT || Pred == CmpInst::ICMP_SLE))
       return {SPF_SMAX, SPNB_NA, false};
 
     // (X >s C1) ? C1 : SMAX(X, C2) ==> SMIN(SMAX(X, C2), C1)
     if (match(FalseVal, m_SMax(m_Specific(CmpLHS), m_APInt(C2))) &&
-        C1->sgt(*C2) && Pred == CmpInst::ICMP_SGT)
+        C1->sgt(*C2) &&
+        (Pred == CmpInst::ICMP_SGT || Pred == CmpInst::ICMP_SGE))
       return {SPF_SMIN, SPNB_NA, false};
 
     // (X <u C1) ? C1 : UMIN(X, C2) ==> UMAX(UMIN(X, C2), C1)
     if (match(FalseVal, m_UMin(m_Specific(CmpLHS), m_APInt(C2))) &&
-        C1->ult(*C2) && Pred == CmpInst::ICMP_ULT)
+        C1->ult(*C2) &&
+        (Pred == CmpInst::ICMP_ULT || Pred == CmpInst::ICMP_ULE))
       return {SPF_UMAX, SPNB_NA, false};
 
     // (X >u C1) ? C1 : UMAX(X, C2) ==> UMIN(UMAX(X, C2), C1)
     if (match(FalseVal, m_UMax(m_Specific(CmpLHS), m_APInt(C2))) &&
-        C1->ugt(*C2) && Pred == CmpInst::ICMP_UGT)
+        C1->ugt(*C2) &&
+        (Pred == CmpInst::ICMP_UGT || Pred == CmpInst::ICMP_UGE))
       return {SPF_UMIN, SPNB_NA, false};
   }
 
-  if (Pred != CmpInst::ICMP_SGT && Pred != CmpInst::ICMP_SLT)
+  if (!CmpInst::isSigned(Pred))
     return {SPF_UNKNOWN, SPNB_NA, false};
 
   // Z = X -nsw Y
@@ -4121,14 +4134,18 @@ static SelectPatternResult matchMinMax(CmpInst::Predicate Pred,
   // (X <s Y) ? 0 : Z ==> (Z <s 0) ? 0 : Z ==> SMAX(Z, 0)
   if (match(TrueVal, m_Zero()) &&
       match(FalseVal, m_NSWSub(m_Specific(CmpLHS), m_Specific(CmpRHS))))
-    return {Pred == CmpInst::ICMP_SGT ? SPF_SMIN : SPF_SMAX, SPNB_NA, false};
+    return {(Pred == CmpInst::ICMP_SGT || Pred == CmpInst::ICMP_SGE) ? SPF_SMIN
+                                                                     : SPF_SMAX,
+            SPNB_NA, false};
 
   // Z = X -nsw Y
   // (X >s Y) ? Z : 0 ==> (Z >s 0) ? Z : 0 ==> SMAX(Z, 0)
   // (X <s Y) ? Z : 0 ==> (Z <s 0) ? Z : 0 ==> SMIN(Z, 0)
   if (match(FalseVal, m_Zero()) &&
       match(TrueVal, m_NSWSub(m_Specific(CmpLHS), m_Specific(CmpRHS))))
-    return {Pred == CmpInst::ICMP_SGT ? SPF_SMAX : SPF_SMIN, SPNB_NA, false};
+    return {(Pred == CmpInst::ICMP_SGT || Pred == CmpInst::ICMP_SGE) ? SPF_SMAX
+                                                                     : SPF_SMIN,
+            SPNB_NA, false};
 
   if (!match(CmpRHS, m_APInt(C1)))
     return {SPF_UNKNOWN, SPNB_NA, false};
@@ -4140,14 +4157,15 @@ static SelectPatternResult matchMinMax(CmpInst::Predicate Pred,
     // Is the sign bit set?
     // (X <s 0) ? X : MAXVAL ==> (X >u MAXVAL) ? X : MAXVAL ==> UMAX
     // (X <s 0) ? MAXVAL : X ==> (X >u MAXVAL) ? MAXVAL : X ==> UMIN
-    if (Pred == CmpInst::ICMP_SLT && *C1 == 0 && C2->isMaxSignedValue())
+    if ((Pred == CmpInst::ICMP_SLT || Pred == CmpInst::ICMP_SLE) && *C1 == 0 &&
+        C2->isMaxSignedValue())
       return {CmpLHS == TrueVal ? SPF_UMAX : SPF_UMIN, SPNB_NA, false};
 
     // Is the sign bit clear?
     // (X >s -1) ? MINVAL : X ==> (X <u MINVAL) ? MINVAL : X ==> UMAX
     // (X >s -1) ? X : MINVAL ==> (X <u MINVAL) ? X : MINVAL ==> UMIN
-    if (Pred == CmpInst::ICMP_SGT && C1->isAllOnesValue() &&
-        C2->isMinSignedValue())
+    if ((Pred == CmpInst::ICMP_SGT || Pred == CmpInst::ICMP_SGE) &&
+        C1->isAllOnesValue() && C2->isMinSignedValue())
       return {CmpLHS == FalseVal ? SPF_UMAX : SPF_UMIN, SPNB_NA, false};
   }
 
@@ -4156,13 +4174,17 @@ static SelectPatternResult matchMinMax(CmpInst::Predicate Pred,
   // (X <s C) ? ~X : ~C ==> (~X >s ~C) ? ~X : ~C ==> SMAX(~X, ~C)
   if (match(TrueVal, m_Not(m_Specific(CmpLHS))) &&
       match(FalseVal, m_APInt(C2)) && ~(*C1) == *C2)
-    return {Pred == CmpInst::ICMP_SGT ? SPF_SMIN : SPF_SMAX, SPNB_NA, false};
+    return {(Pred == CmpInst::ICMP_SGT || Pred == CmpInst::ICMP_SGE) ? SPF_SMIN
+                                                                     : SPF_SMAX,
+            SPNB_NA, false};
 
   // (X >s C) ? ~C : ~X ==> (~X <s ~C) ? ~C : ~X ==> SMAX(~C, ~X)
   // (X <s C) ? ~C : ~X ==> (~X >s ~C) ? ~C : ~X ==> SMIN(~C, ~X)
   if (match(FalseVal, m_Not(m_Specific(CmpLHS))) &&
       match(TrueVal, m_APInt(C2)) && ~(*C1) == *C2)
-    return {Pred == CmpInst::ICMP_SGT ? SPF_SMAX : SPF_SMIN, SPNB_NA, false};
+    return {(Pred == CmpInst::ICMP_SGT || Pred == CmpInst::ICMP_SGE) ? SPF_SMAX
+                                                                     : SPF_SMIN,
+            SPNB_NA, false};
 
   return {SPF_UNKNOWN, SPNB_NA, false};
 }
