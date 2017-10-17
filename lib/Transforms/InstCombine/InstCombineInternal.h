@@ -663,6 +663,8 @@ private:
   /// This is a convenience wrapper function for the above two functions.
   Instruction *foldOpWithConstantIntoOperand(BinaryOperator &I);
 
+  Instruction *foldAddWithConstant(BinaryOperator &Add);
+
   /// \brief Try to rotate an operation below a PHI node, using PHI nodes for
   /// its operands.
   Instruction *FoldPHIArgOpIntoPHI(PHINode &PN);
@@ -698,6 +700,7 @@ private:
   Instruction *foldICmpInstWithConstantNotInt(ICmpInst &Cmp);
   Instruction *foldICmpBinOp(ICmpInst &Cmp);
   Instruction *foldICmpEquality(ICmpInst &Cmp);
+  Instruction *foldICmpWithZero(ICmpInst &Cmp);
 
   Instruction *foldICmpSelectConstant(ICmpInst &Cmp, SelectInst *Select,
                                       ConstantInt *C);
