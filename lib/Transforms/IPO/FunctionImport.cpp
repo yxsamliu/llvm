@@ -102,6 +102,12 @@ static cl::opt<bool> PrintImports("print-imports", cl::init(false), cl::Hidden,
 static cl::opt<bool> ComputeDead("compute-dead", cl::init(true), cl::Hidden,
                                  cl::desc("Compute dead symbols"));
 
+bool llvm::ForceWeakImportFlag = false;
+static cl::opt<bool, true>
+ForceWeakImport("force-weak-import", cl::Hidden,
+                cl::desc("Allow weak functions to be imported"),
+                cl::location(ForceWeakImportFlag));
+
 static cl::opt<bool> EnableImportMetadata(
     "enable-import-metadata", cl::init(
 #if !defined(NDEBUG)
@@ -169,10 +175,9 @@ selectCallee(const ModuleSummaryIndex &Index,
         // filtered out.
         if (GVSummary->getSummaryKind() == GlobalValueSummary::GlobalVarKind)
           return false;
-        // Do not check for HCC ThinLTO's Cross-module Importing
-        //if (GlobalValue::isInterposableLinkage(GVSummary->linkage()))
+        if (!ForceWeakImportFlag && GlobalValue::isInterposableLinkage(GVSummary->linkage()))
           // There is no point in importing these, we can't inline them
-          //return false;
+          return false;
         if (isa<AliasSummary>(GVSummary))
           // Aliases can't point to "available_externally".
           // FIXME: we should import alias as available_externally *function*,
