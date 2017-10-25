@@ -169,9 +169,10 @@ selectCallee(const ModuleSummaryIndex &Index,
         // filtered out.
         if (GVSummary->getSummaryKind() == GlobalValueSummary::GlobalVarKind)
           return false;
-        if (GlobalValue::isInterposableLinkage(GVSummary->linkage()))
+        // Do not check for HCC ThinLTO's Cross-module Importing
+        //if (GlobalValue::isInterposableLinkage(GVSummary->linkage()))
           // There is no point in importing these, we can't inline them
-          return false;
+          //return false;
         if (isa<AliasSummary>(GVSummary))
           // Aliases can't point to "available_externally".
           // FIXME: we should import alias as available_externally *function*,
