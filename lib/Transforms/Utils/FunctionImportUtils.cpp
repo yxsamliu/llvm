@@ -151,7 +151,7 @@ FunctionImportGlobalProcessing::getLinkage(const GlobalValue *SGV,
     // program semantics, since the linker will pick the first weak_any
     // definition and importing would change the order they are seen by the
     // linker. The module linking caller needs to enforce this.
-    if(!ForceWeakImportFlag)
+    if(!ForceImportWeakFlag)
       assert(!doImportAsDefinition(SGV));
     // If imported as a declaration, it becomes external_weak.
     return SGV->getLinkage();

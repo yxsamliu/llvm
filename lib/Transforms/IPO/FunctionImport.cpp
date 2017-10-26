@@ -102,11 +102,11 @@ static cl::opt<bool> PrintImports("print-imports", cl::init(false), cl::Hidden,
 static cl::opt<bool> ComputeDead("compute-dead", cl::init(true), cl::Hidden,
                                  cl::desc("Compute dead symbols"));
 
-bool llvm::ForceWeakImportFlag = false;
+bool llvm::ForceImportWeakFlag = false;
 static cl::opt<bool, true>
-ForceWeakImport("force-weak-import", cl::Hidden,
+ForceImportWeak("force-import-weak", cl::Hidden,
                 cl::desc("Allow weak functions to be imported"),
-                cl::location(ForceWeakImportFlag));
+                cl::location(ForceImportWeakFlag));
 
 static cl::opt<bool> EnableImportMetadata(
     "enable-import-metadata", cl::init(
@@ -175,7 +175,7 @@ selectCallee(const ModuleSummaryIndex &Index,
         // filtered out.
         if (GVSummary->getSummaryKind() == GlobalValueSummary::GlobalVarKind)
           return false;
-        if (!ForceWeakImportFlag && GlobalValue::isInterposableLinkage(GVSummary->linkage()))
+        if (!ForceImportWeakFlag && GlobalValue::isInterposableLinkage(GVSummary->linkage()))
           // There is no point in importing these, we can't inline them
           return false;
         if (isa<AliasSummary>(GVSummary))
