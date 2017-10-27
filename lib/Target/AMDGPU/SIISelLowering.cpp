@@ -65,7 +65,6 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Type.h"
-#include "llvm/Support/Debug.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/CommandLine.h"
@@ -2448,7 +2447,7 @@ MachineBasicBlock *SITargetLowering::splitKillBlock(MachineInstr &MI,
 
   if (SplitPoint == BB->end()) {
     // Don't bother with a new block.
-    MI.setDesc(TII->get(AMDGPU::SI_KILL_TERMINATOR));
+    MI.setDesc(TII->getKillTerminatorFromPseudo(MI.getOpcode()));
     return BB;
   }
 
@@ -2462,7 +2461,7 @@ MachineBasicBlock *SITargetLowering::splitKillBlock(MachineInstr &MI,
   SplitBB->transferSuccessorsAndUpdatePHIs(BB);
   BB->addSuccessor(SplitBB);
 
-  MI.setDesc(TII->get(AMDGPU::SI_KILL_TERMINATOR));
+  MI.setDesc(TII->getKillTerminatorFromPseudo(MI.getOpcode()));
   return SplitBB;
 }
 
@@ -3016,7 +3015,8 @@ MachineBasicBlock *SITargetLowering::EmitInstrWithCustomInserter(
   case AMDGPU::SI_INDIRECT_DST_V8:
   case AMDGPU::SI_INDIRECT_DST_V16:
     return emitIndirectDst(MI, *BB, *getSubtarget());
-  case AMDGPU::SI_KILL:
+  case AMDGPU::SI_KILL_F32_COND_IMM_PSEUDO:
+  case AMDGPU::SI_KILL_I1_PSEUDO:
     return splitKillBlock(MI, BB);
   case AMDGPU::V_CNDMASK_B64_PSEUDO: {
     MachineRegisterInfo &MRI = BB->getParent()->getRegInfo();
