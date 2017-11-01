@@ -171,7 +171,7 @@ template <>
 struct MappingTraits<Kernel::Metadata> {
   static void mapping(IO &YIO, Kernel::Metadata &MD) {
     YIO.mapRequired(Kernel::Key::Name, MD.mName);
-    YIO.mapRequired(Kernel::Key::SymbolName, MD.mSymbolName);
+    YIO.mapOptional(Kernel::Key::SymbolName, MD.mSymbolName);
     YIO.mapOptional(Kernel::Key::Language, MD.mLanguage, std::string());
     YIO.mapOptional(Kernel::Key::LanguageVersion, MD.mLanguageVersion,
                     std::vector<uint32_t>());
@@ -204,6 +204,11 @@ namespace HSAMD {
 std::error_code fromString(std::string String, Metadata &HSAMetadata) {
   yaml::Input YamlInput(String);
   YamlInput >> HSAMetadata;
+  for (auto &I : HSAMetadata.mKernels) {
+    if (I.mSymbolName.empty()) {
+      I.mSymbolName = I.mName + "@kd";
+    }
+  }
   return YamlInput.error();
 }
 
