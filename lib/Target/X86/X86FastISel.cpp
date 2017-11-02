@@ -2410,7 +2410,8 @@ bool X86FastISel::X86SelectSIToFP(const Instruction *I) {
   if (!Subtarget->hasAVX())
     return false;
 
-  if (!I->getOperand(0)->getType()->isIntegerTy(32))
+  Type *InTy = I->getOperand(0)->getType();
+  if (!InTy->isIntegerTy(32) && !InTy->isIntegerTy(64))
     return false;
 
   // Select integer to float/double conversion.
@@ -2423,11 +2424,11 @@ bool X86FastISel::X86SelectSIToFP(const Instruction *I) {
 
   if (I->getType()->isDoubleTy()) {
     // sitofp int -> double
-    Opcode = X86::VCVTSI2SDrr;
+    Opcode = InTy->isIntegerTy(64) ? X86::VCVTSI2SD64rr : X86::VCVTSI2SDrr;
     RC = &X86::FR64RegClass;
   } else if (I->getType()->isFloatTy()) {
     // sitofp int -> float
-    Opcode = X86::VCVTSI2SSrr;
+    Opcode = InTy->isIntegerTy(64) ? X86::VCVTSI2SS64rr : X86::VCVTSI2SSrr;
     RC = &X86::FR32RegClass;
   } else
     return false;
@@ -3876,14 +3877,15 @@ unsigned X86FastISel::fastMaterializeFloatZero(const ConstantFP *CF) {
     return 0;
 
   // Get opcode and regclass for the given zero.
+  bool HasAVX512 = Subtarget->hasAVX512();
   unsigned Opc = 0;
   const TargetRegisterClass *RC = nullptr;
   switch (VT.SimpleTy) {
   default: return 0;
   case MVT::f32:
     if (X86ScalarSSEf32) {
-      Opc = X86::FsFLD0SS;
-      RC  = &X86::FR32RegClass;
+      Opc = HasAVX512 ? X86::AVX512_FsFLD0SS : X86::FsFLD0SS;
+      RC  = HasAVX512 ? &X86::FR32XRegClass : &X86::FR32RegClass;
     } else {
       Opc = X86::LD_Fp032;
       RC  = &X86::RFP32RegClass;
@@ -3891,8 +3893,8 @@ unsigned X86FastISel::fastMaterializeFloatZero(const ConstantFP *CF) {
     break;
   case MVT::f64:
     if (X86ScalarSSEf64) {
-      Opc = X86::FsFLD0SD;
-      RC  = &X86::FR64RegClass;
+      Opc = HasAVX512 ? X86::AVX512_FsFLD0SD : X86::FsFLD0SD;
+      RC  = HasAVX512 ? &X86::FR64XRegClass : &X86::FR64RegClass;
     } else {
       Opc = X86::LD_Fp064;
       RC  = &X86::RFP64RegClass;
