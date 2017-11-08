@@ -34,7 +34,7 @@ using namespace std;
 namespace
 {
     class SelectAcceleratorCode : public ModulePass {
-        unordered_set<Function*> hcCallees_;
+        unordered_set<const Function*> hcCallees_;
 
         void findAllHCCallees_(const Function &f, Module &M)
         {
@@ -85,8 +85,8 @@ namespace
             return eraseIf_(
                 [&]() { return M.begin(); },
                 [&]() { return M.end(); },
-                [&, this](const Function& x) {
-                    return hcCallees_.count(M.getFunction(x.getName())) == 0;
+                [&, this](const Function& function) {
+                    return hcCallees_.count(function.getFunction()) == 0;
                 });
         }
 
@@ -107,13 +107,13 @@ namespace
         }
 
         static
-        bool alwaysInline_(Function& x)
+        bool alwaysInline_(Function& function)
         {
-            if (!x.hasFnAttribute(Attribute::AlwaysInline)) {
-                if (x.hasFnAttribute(Attribute::NoInline)) {
-                    x.removeFnAttr(Attribute::NoInline);
+            if (!function.hasFnAttribute(Attribute::AlwaysInline)) {
+                if (function.hasFnAttribute(Attribute::NoInline)) {
+                    function.removeFnAttr(Attribute::NoInline);
                 }
-                x.addFnAttr(Attribute::AlwaysInline);
+                function.addFnAttr(Attribute::AlwaysInline);
 
                 return false;
             }
@@ -126,10 +126,10 @@ namespace
 
         bool doInitialization(Module &M) override
         {   // TODO: this may represent a valid analysis pass.
-            for (auto&& x : M.functions()) {
-                if (x.hasFnAttribute("HC")) {
-                    auto t = hcCallees_.insert(M.getFunction(x.getName()));
-                    if (t.second) findAllHCCallees_(x, M);
+            for (auto&& function : M.functions()) {
+                if (function.getCallingConv() == CallingConv::AMDGPU_KERNEL) {
+                    auto t = hcCallees_.insert(function.getFunction());
+                    if (t.second) findAllHCCallees_(function, M);
                 }
             }
 
@@ -146,22 +146,26 @@ namespace
 
             r = eraseDeadAliases_(M) || r;
 
+            for (auto&& function : M.functions()) {
+                r = !alwaysInline_(function) || r;
+            }
+
             return r;
         }
 
         bool doFinalization(Module& M) override
         {
-            bool r = false;
-            std::for_each(M.begin(), M.end(), [&](Function& x) {
-                if (!isInlineViable(x) && !x.isIntrinsic()) {
-                    M.getContext().diagnose(DiagnosticInfoUnsupported{
-                        x, "The function cannot be inlined."});
-                }
-
-                r = !alwaysInline_(x);
+            const auto it = std::find_if(
+                M.begin(), M.end(), [](Function& function) {
+                return !isInlineViable(function) && !function.isIntrinsic();
             });
 
-            return r;
+            if (it != M.end()) {
+                M.getContext().diagnose(DiagnosticInfoUnsupported{
+                    *it, "The function cannot be inlined."});
+            }
+
+            return false;
         }
     };
     char SelectAcceleratorCode::ID = 0;
