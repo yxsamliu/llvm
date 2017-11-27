@@ -13,6 +13,7 @@
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
@@ -40,6 +41,10 @@ static cl::opt<bool>
     PreserveLocals("preserve-locals", cl::Prefix, cl::init(false),
                    cl::desc("Split without externalizing locals"));
 
+static cl::opt<bool>
+    SplitHCCKernels("split-hcc-kernels", cl::Prefix, cl::init(false),
+                   cl::desc("Split HCC Kernels and print number of files"));
+
 int main(int argc, char **argv) {
   LLVMContext Context;
   SMDiagnostic Err;
@@ -50,6 +55,21 @@ int main(int argc, char **argv) {
   if (!M) {
     Err.print(argv[0], errs());
     return 1;
+  }
+
+  if (SplitHCCKernels) {
+    int KernelCount = 0;
+    for (auto&& F: M->functions()) {
+      if (F.getCallingConv() == CallingConv::AMDGPU_KERNEL)
+        KernelCount++;
+    }
+    outs() << KernelCount << '\n';
+    // If only one kernel, exit
+    // Otherwise we split into KernelCount number of modules
+    if (KernelCount == 1)
+      return 0;
+    else
+      NumOutputs = KernelCount;
   }
 
   unsigned I = 0;
