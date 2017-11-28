@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     outs() << KernelCount << '\n';
     // If only one kernel, exit
     // Otherwise we split into KernelCount number of modules
-    if (KernelCount == 1)
+    if (KernelCount <= 1)
       return 0;
     else
       NumOutputs = KernelCount;
