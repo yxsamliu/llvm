@@ -274,7 +274,7 @@ void llvm::SplitModule(
         CloneModule(M.get(), VMap, [&](const GlobalValue *GV) {
           if (const Function *F = dyn_cast<Function>(GV)) {
             if (F->getCallingConv() == CallingConv::AMDGPU_KERNEL)
-              return (HCCKernelIndex++ == I);
+              return ((HCCKernelIndex++) % N == I);
           }
           if (ClusterIDMap.count(GV))
             return (ClusterIDMap[GV] == I);

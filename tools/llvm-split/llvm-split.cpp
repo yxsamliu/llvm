@@ -45,6 +45,10 @@ static cl::opt<bool>
     SplitHCCKernels("split-hcc-kernels", cl::Prefix, cl::init(false),
                    cl::desc("Split HCC Kernels and print number of files"));
 
+static cl::opt<unsigned>
+    SplitHCCThreshold("split-hcc-threshold", cl::Prefix, cl::init(100),
+                   cl::desc("Split HCC Kernels if above kernel count threshold"));
+
 int main(int argc, char **argv) {
   LLVMContext Context;
   SMDiagnostic Err;
@@ -64,12 +68,10 @@ int main(int argc, char **argv) {
         KernelCount++;
     }
     outs() << KernelCount << '\n';
-    // If only one kernel, exit
-    // Otherwise we split into KernelCount number of modules
-    if (KernelCount <= 1)
+    // If below kernel threshold, exit
+    // Otherwise we split NumOutputs files
+    if (KernelCount <= SplitHCCThreshold)
       return 0;
-    else
-      NumOutputs = KernelCount;
   }
 
   unsigned I = 0;
