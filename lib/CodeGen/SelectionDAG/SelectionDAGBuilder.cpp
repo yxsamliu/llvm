@@ -8599,19 +8599,20 @@ static SmallVector<unsigned, 4> OriginalAlignments(
   Type *Ty,
   SmallVector<unsigned, 4> Align = {}) {
   if (StructType *STy = dyn_cast<StructType>(Ty)) {
-    unsigned first = Align.size();
+    auto First = Align.size();
     const StructLayout *SL = DL.getStructLayout(STy);
 
     for (auto &&E : STy->elements()) {
       Align = OriginalAlignments(F, TLI, DL, E, std::move(Align));
     }
-    if (IsAMDGPUKernel(F)) Align[first] = SL->getAlignment();
+    if (IsAMDGPUKernel(F)) Align[First] = SL->getAlignment();
   }
   else if (ArrayType *ATy = dyn_cast<ArrayType>(Ty)) {
-    Align.insert(
-      Align.end(),
-      ATy->getArrayNumElements(),
-      TLI.getABIAlignmentForCallingConv(ATy->getArrayElementType(), DL));
+    Type *ETy = ATy->getArrayElementType();
+    SmallVector<unsigned, 4> Tmp = OriginalAlignments(F, TLI, DL, ETy);
+
+    auto N = ATy->getArrayNumElements();
+    while (N--) Align.insert(Align.end(), Tmp.begin(), Tmp.end());
   }
   else if (!Ty->isVoidTy()) {
     Align.push_back(TLI.getABIAlignmentForCallingConv(Ty, DL));
