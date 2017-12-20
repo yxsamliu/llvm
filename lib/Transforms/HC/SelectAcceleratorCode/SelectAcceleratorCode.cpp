@@ -41,7 +41,7 @@ class SelectAcceleratorCode : public ModulePass {
                 if (I.getOpcode() == Instruction::Call) {
                     auto Callee = cast<CallInst>(I).getCalledFunction();
                     if (Callee) {
-                        auto Tmp = HCCallees_.insert(Callee->getFunction());
+                        auto Tmp = HCCallees_.insert(M.getFunction(Callee->getName()));
                         if (Tmp.second) findAllHCCallees_(*Callee, M);
                     }
                 }
@@ -83,7 +83,7 @@ class SelectAcceleratorCode : public ModulePass {
             [&]() { return M.begin(); },
             [&]() { return M.end(); },
             [&, this](const Function &F) {
-                return HCCallees_.count(F.getFunction()) == 0;
+                return HCCallees_.count(M.getFunction(F.getName())) == 0;
             });
     }
 
@@ -125,7 +125,7 @@ public:
     {   // TODO: this may represent a valid analysis pass.
         for (auto&& F : M.functions()) {
             if (F.getCallingConv() == CallingConv::AMDGPU_KERNEL) {
-                auto Tmp = HCCallees_.insert(F.getFunction());
+                 auto Tmp = HCCallees_.insert(M.getFunction(F.getName()));
                 if (Tmp.second) findAllHCCallees_(F, M);
             }
         }
