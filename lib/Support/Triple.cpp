@@ -672,8 +672,6 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::tce:
   case Triple::tcele:
   case Triple::thumbeb:
-  case Triple::wasm32:
-  case Triple::wasm64:
   case Triple::xcore:
     return Triple::ELF;
 
@@ -682,6 +680,10 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
     if (T.isOSDarwin())
       return Triple::MachO;
     return Triple::ELF;
+
+  case Triple::wasm32:
+  case Triple::wasm64:
+    return Triple::Wasm;
   }
   llvm_unreachable("unknown architecture");
 }
