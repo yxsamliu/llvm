@@ -12,22 +12,24 @@
 #include "gtest/gtest.h"
 
 using namespace llvm;
+using namespace LegalizeActions;
 
 // Define a couple of pretty printers to help debugging when things go wrong.
 namespace llvm {
 std::ostream &
-operator<<(std::ostream &OS, const llvm::LegalizerInfo::LegalizeAction Act) {
+operator<<(std::ostream &OS, const LegalizeAction Act) {
   switch (Act) {
-  case LegalizerInfo::Lower: OS << "Lower"; break;
-  case LegalizerInfo::Legal: OS << "Legal"; break;
-  case LegalizerInfo::NarrowScalar: OS << "NarrowScalar"; break;
-  case LegalizerInfo::WidenScalar:  OS << "WidenScalar"; break;
-  case LegalizerInfo::FewerElements:  OS << "FewerElements"; break;
-  case LegalizerInfo::MoreElements:  OS << "MoreElements"; break;
-  case LegalizerInfo::Libcall: OS << "Libcall"; break;
-  case LegalizerInfo::Custom: OS << "Custom"; break;
-  case LegalizerInfo::Unsupported: OS << "Unsupported"; break;
-  case LegalizerInfo::NotFound: OS << "NotFound";
+  case Lower: OS << "Lower"; break;
+  case Legal: OS << "Legal"; break;
+  case NarrowScalar: OS << "NarrowScalar"; break;
+  case WidenScalar:  OS << "WidenScalar"; break;
+  case FewerElements:  OS << "FewerElements"; break;
+  case MoreElements:  OS << "MoreElements"; break;
+  case Libcall: OS << "Libcall"; break;
+  case Custom: OS << "Custom"; break;
+  case Unsupported: OS << "Unsupported"; break;
+  case NotFound: OS << "NotFound"; break;
+  case UseLegacyRules: OS << "UseLegacyRules"; break;
   }
   return OS;
 }
@@ -51,7 +53,7 @@ TEST(LegalizerInfoTest, ScalarRISC) {
   // Typical RISCy set of operations based on AArch64.
   for (unsigned Op : {G_ADD, G_SUB}) {
     for (unsigned Size : {32, 64})
-      L.setAction({Op, 0, LLT::scalar(Size)}, LegalizerInfo::Legal);
+      L.setAction({Op, 0, LLT::scalar(Size)}, Legal);
     L.setLegalizeScalarToDifferentSizeStrategy(
         Op, 0, LegalizerInfo::widenToLargerTypesAndNarrowToLargest);
   }
@@ -100,17 +102,17 @@ TEST(LegalizerInfoTest, VectorRISC) {
   using namespace TargetOpcode;
   LegalizerInfo L;
   // Typical RISCy set of operations based on ARM.
-  L.setAction({G_ADD, LLT::vector(8, 8)}, LegalizerInfo::Legal);
-  L.setAction({G_ADD, LLT::vector(16, 8)}, LegalizerInfo::Legal);
-  L.setAction({G_ADD, LLT::vector(4, 16)}, LegalizerInfo::Legal);
-  L.setAction({G_ADD, LLT::vector(8, 16)}, LegalizerInfo::Legal);
-  L.setAction({G_ADD, LLT::vector(2, 32)}, LegalizerInfo::Legal);
-  L.setAction({G_ADD, LLT::vector(4, 32)}, LegalizerInfo::Legal);
+  L.setAction({G_ADD, LLT::vector(8, 8)}, Legal);
+  L.setAction({G_ADD, LLT::vector(16, 8)}, Legal);
+  L.setAction({G_ADD, LLT::vector(4, 16)}, Legal);
+  L.setAction({G_ADD, LLT::vector(8, 16)}, Legal);
+  L.setAction({G_ADD, LLT::vector(2, 32)}, Legal);
+  L.setAction({G_ADD, LLT::vector(4, 32)}, Legal);
 
   L.setLegalizeVectorElementToDifferentSizeStrategy(
       G_ADD, 0, LegalizerInfo::widenToLargerTypesUnsupportedOtherwise);
 
-  L.setAction({G_ADD, 0, LLT::scalar(32)}, LegalizerInfo::Legal);
+  L.setAction({G_ADD, 0, LLT::scalar(32)}, Legal);
 
   L.computeTables();
 
@@ -143,8 +145,8 @@ TEST(LegalizerInfoTest, MultipleTypes) {
   LLT s64 = LLT::scalar(64);
 
   // Typical RISCy set of operations based on AArch64.
-  L.setAction({G_PTRTOINT, 0, s64}, LegalizerInfo::Legal);
-  L.setAction({G_PTRTOINT, 1, p0}, LegalizerInfo::Legal);
+  L.setAction({G_PTRTOINT, 0, s64}, Legal);
+  L.setAction({G_PTRTOINT, 1, p0}, Legal);
 
   L.setLegalizeScalarToDifferentSizeStrategy(
       G_PTRTOINT, 0, LegalizerInfo::widenToLargerTypesAndNarrowToLargest);
@@ -172,8 +174,8 @@ TEST(LegalizerInfoTest, MultipleSteps) {
 
   L.setLegalizeScalarToDifferentSizeStrategy(
       G_UREM, 0, LegalizerInfo::widenToLargerTypesUnsupportedOtherwise);
-  L.setAction({G_UREM, 0, s32}, LegalizerInfo::Lower);
-  L.setAction({G_UREM, 0, s64}, LegalizerInfo::Lower);
+  L.setAction({G_UREM, 0, s32}, Lower);
+  L.setAction({G_UREM, 0, s64}, Lower);
 
   L.computeTables();
 
@@ -189,7 +191,7 @@ TEST(LegalizerInfoTest, SizeChangeStrategy) {
   using namespace TargetOpcode;
   LegalizerInfo L;
   for (unsigned Size : {1, 8, 16, 32})
-    L.setAction({G_UREM, 0, LLT::scalar(Size)}, LegalizerInfo::Legal);
+    L.setAction({G_UREM, 0, LLT::scalar(Size)}, Legal);
 
   L.setLegalizeScalarToDifferentSizeStrategy(
       G_UREM, 0, LegalizerInfo::widenToLargerTypesUnsupportedOtherwise);

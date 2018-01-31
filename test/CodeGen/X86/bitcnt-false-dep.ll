@@ -1,5 +1,9 @@
 ; RUN: llc < %s -mtriple=x86_64-unknown-linux-gnu -mcpu=haswell -mattr=+lzcnt | FileCheck %s --check-prefix=HSW
 ; RUN: llc < %s -mtriple=x86_64-unknown-linux-gnu -mcpu=skylake -mattr=+lzcnt | FileCheck %s --check-prefix=SKL
+<<<<<<< HEAD
+=======
+; RUN: llc < %s -mtriple=x86_64-unknown-linux-gnu -mcpu=skx -mattr=+lzcnt | FileCheck %s --check-prefix=SKL
+>>>>>>> upstream/amd-common
 
 ; This tests a fix for bugzilla 33869 https://bugs.llvm.org/show_bug.cgi?id=33869
 
