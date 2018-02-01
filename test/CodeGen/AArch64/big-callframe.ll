@@ -1,8 +1,5 @@
 ; RUN: llc -o - %s -verify-machineinstrs | FileCheck %s
-<<<<<<< HEAD
-=======
 ; XFAIL: *
->>>>>>> upstream/amd-common
 ; Make sure we use a frame pointer and fp relative addressing for the emergency
 ; spillslot when we have gigantic callframes.
 ; CHECK-LABEL: func:

@@ -54,11 +54,7 @@ struct ConstantMatch {
   }
 };
 
-<<<<<<< HEAD
-ConstantMatch m_ICst(uint64_t &Cst) { return ConstantMatch(Cst); }
-=======
 inline ConstantMatch m_ICst(uint64_t &Cst) { return ConstantMatch(Cst); }
->>>>>>> upstream/amd-common
 
 // TODO: Rework this for different kinds of MachineOperand.
 // Currently assumes the Src for a match is a register.
@@ -72,11 +68,7 @@ struct operand_type_match {
   }
 };
 
-<<<<<<< HEAD
-operand_type_match m_Reg() { return operand_type_match(); }
-=======
 inline operand_type_match m_Reg() { return operand_type_match(); }
->>>>>>> upstream/amd-common
 
 /// Matching combinators.
 template <typename... Preds> struct And {
