@@ -832,6 +832,9 @@ bool DeadArgumentEliminationPass::RemoveDeadStuffFromFunction(Function *F) {
   F->getParent()->getFunctionList().insert(F->getIterator(), NF);
   NF->takeName(F);
 
+  // Patch the pointer to LLVM function in debug info descriptor.
+  NF->setSubprogram(F->getSubprogram());
+
   // Loop over all of the callers of the function, transforming the call sites
   // to pass in a smaller number of arguments into the new function.
   std::vector<Value*> Args;
@@ -1023,9 +1026,6 @@ bool DeadArgumentEliminationPass::RemoveDeadStuffFromFunction(Function *F) {
         ReturnInst::Create(F->getContext(), RetVal, RI);
         BB.getInstList().erase(RI);
       }
-
-  // Patch the pointer to LLVM function in debug info descriptor.
-  NF->setSubprogram(F->getSubprogram());
 
   // Now that the old function is dead, delete it.
   F->eraseFromParent();
