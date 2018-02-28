@@ -2743,7 +2743,8 @@ static MachineBasicBlock::iterator emitLoadM0FromVGPRLoop(
   unsigned PhiReg,
   unsigned InitSaveExecReg,
   int Offset,
-  bool UseGPRIdxMode) {
+  bool UseGPRIdxMode,
+  bool IsIndirectSrc) {
   MachineBasicBlock::iterator I = LoopBB.begin();
 
   unsigned PhiExec = MRI.createVirtualRegister(&AMDGPU::SReg_64RegClass);
@@ -2772,6 +2773,12 @@ static MachineBasicBlock::iterator emitLoadM0FromVGPRLoop(
     .addReg(CurrentIdxReg)
     .addReg(IdxReg.getReg(), 0, IdxReg.getSubReg());
 
+  // Update EXEC, save the original EXEC value to VCC.
+  BuildMI(LoopBB, I, DL, TII->get(AMDGPU::S_AND_SAVEEXEC_B64), NewExec)
+    .addReg(CondReg, RegState::Kill);
+
+  MRI.setSimpleHint(NewExec, CondReg);
+
   if (UseGPRIdxMode) {
     unsigned IdxReg;
     if (Offset == 0) {
@@ -2782,11 +2789,13 @@ static MachineBasicBlock::iterator emitLoadM0FromVGPRLoop(
         .addReg(CurrentIdxReg, RegState::Kill)
         .addImm(Offset);
     }
-
-    MachineInstr *SetIdx =
-      BuildMI(LoopBB, I, DL, TII->get(AMDGPU::S_SET_GPR_IDX_IDX))
-      .addReg(IdxReg, RegState::Kill);
-    SetIdx->getOperand(2).setIsUndef();
+    unsigned IdxMode = IsIndirectSrc ?
+      VGPRIndexMode::SRC0_ENABLE : VGPRIndexMode::DST_ENABLE;
+    MachineInstr *SetOn =
+      BuildMI(LoopBB, I, DL, TII->get(AMDGPU::S_SET_GPR_IDX_ON))
+      .addReg(IdxReg, RegState::Kill)
+      .addImm(IdxMode);
+    SetOn->getOperand(3).setIsUndef();
   } else {
     // Move index from VCC into M0
     if (Offset == 0) {
@@ -2798,12 +2807,6 @@ static MachineBasicBlock::iterator emitLoadM0FromVGPRLoop(
         .addImm(Offset);
     }
   }
-
-  // Update EXEC, save the original EXEC value to VCC.
-  BuildMI(LoopBB, I, DL, TII->get(AMDGPU::S_AND_SAVEEXEC_B64), NewExec)
-    .addReg(CondReg, RegState::Kill);
-
-  MRI.setSimpleHint(NewExec, CondReg);
 
   // Update EXEC, switch all done bits to 0 and all todo bits to 1.
   MachineInstr *InsertPt =
@@ -2832,7 +2835,8 @@ static MachineBasicBlock::iterator loadM0FromVGPR(const SIInstrInfo *TII,
                                                   unsigned InitResultReg,
                                                   unsigned PhiReg,
                                                   int Offset,
-                                                  bool UseGPRIdxMode) {
+                                                  bool UseGPRIdxMode,
+                                                  bool IsIndirectSrc) {
   MachineFunction *MF = MBB.getParent();
   MachineRegisterInfo &MRI = MF->getRegInfo();
   const DebugLoc &DL = MI.getDebugLoc();
@@ -2871,7 +2875,7 @@ static MachineBasicBlock::iterator loadM0FromVGPR(const SIInstrInfo *TII,
 
   auto InsPt = emitLoadM0FromVGPRLoop(TII, MRI, MBB, *LoopBB, DL, *Idx,
                                       InitResultReg, DstReg, PhiReg, TmpExec,
-                                      Offset, UseGPRIdxMode);
+                                      Offset, UseGPRIdxMode, IsIndirectSrc);
 
   MachineBasicBlock::iterator First = RemainderBB->begin();
   BuildMI(*RemainderBB, First, DL, TII->get(AMDGPU::S_MOV_B64), AMDGPU::EXEC)
@@ -3006,17 +3010,8 @@ static MachineBasicBlock *emitIndirectSrc(MachineInstr &MI,
 
   BuildMI(MBB, I, DL, TII->get(TargetOpcode::IMPLICIT_DEF), InitReg);
 
-  if (UseGPRIdxMode) {
-    MachineInstr *SetOn = BuildMI(MBB, I, DL, TII->get(AMDGPU::S_SET_GPR_IDX_ON))
-      .addImm(0) // Reset inside loop.
-      .addImm(VGPRIndexMode::SRC0_ENABLE);
-    SetOn->getOperand(3).setIsUndef();
-
-    // Disable again after the loop.
-    BuildMI(MBB, std::next(I), DL, TII->get(AMDGPU::S_SET_GPR_IDX_OFF));
-  }
-
-  auto InsPt = loadM0FromVGPR(TII, MBB, MI, InitReg, PhiReg, Offset, UseGPRIdxMode);
+  auto InsPt = loadM0FromVGPR(TII, MBB, MI, InitReg, PhiReg,
+                              Offset, UseGPRIdxMode, true);
   MachineBasicBlock *LoopBB = InsPt->getParent();
 
   if (UseGPRIdxMode) {
@@ -3024,6 +3019,7 @@ static MachineBasicBlock *emitIndirectSrc(MachineInstr &MI,
       .addReg(SrcReg, RegState::Undef, SubReg)
       .addReg(SrcReg, RegState::Implicit)
       .addReg(AMDGPU::M0, RegState::Implicit);
+    BuildMI(*LoopBB, InsPt, DL, TII->get(AMDGPU::S_SET_GPR_IDX_OFF));
   } else {
     BuildMI(*LoopBB, InsPt, DL, TII->get(AMDGPU::V_MOVRELS_B32_e32), Dst)
       .addReg(SrcReg, RegState::Undef, SubReg)
@@ -3124,22 +3120,10 @@ static MachineBasicBlock *emitIndirectDst(MachineInstr &MI,
 
   const DebugLoc &DL = MI.getDebugLoc();
 
-  if (UseGPRIdxMode) {
-    MachineBasicBlock::iterator I(&MI);
-
-    MachineInstr *SetOn = BuildMI(MBB, I, DL, TII->get(AMDGPU::S_SET_GPR_IDX_ON))
-      .addImm(0) // Reset inside loop.
-      .addImm(VGPRIndexMode::DST_ENABLE);
-    SetOn->getOperand(3).setIsUndef();
-
-    // Disable again after the loop.
-    BuildMI(MBB, std::next(I), DL, TII->get(AMDGPU::S_SET_GPR_IDX_OFF));
-  }
-
   unsigned PhiReg = MRI.createVirtualRegister(VecRC);
 
   auto InsPt = loadM0FromVGPR(TII, MBB, MI, SrcVec->getReg(), PhiReg,
-                              Offset, UseGPRIdxMode);
+                              Offset, UseGPRIdxMode, false);
   MachineBasicBlock *LoopBB = InsPt->getParent();
 
   if (UseGPRIdxMode) {
@@ -3149,6 +3133,7 @@ static MachineBasicBlock *emitIndirectDst(MachineInstr &MI,
         .addReg(Dst, RegState::ImplicitDefine)
         .addReg(PhiReg, RegState::Implicit)
         .addReg(AMDGPU::M0, RegState::Implicit);
+    BuildMI(*LoopBB, InsPt, DL, TII->get(AMDGPU::S_SET_GPR_IDX_OFF));
   } else {
     const MCInstrDesc &MovRelDesc = TII->get(getMOVRELDPseudo(TRI, VecRC));
 

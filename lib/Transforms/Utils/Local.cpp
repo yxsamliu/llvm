@@ -1365,14 +1365,17 @@ void llvm::insertDebugValuesForPHIs(BasicBlock *BB,
   // propagate the info through the new PHI.
   LLVMContext &C = BB->getContext();
   for (auto PHI : InsertedPHIs) {
+    BasicBlock *Parent = PHI->getParent();
+    // Avoid inserting an intrinsic into an EH block.
+    if (Parent->getFirstNonPHI()->isEHPad())
+      continue;
+    auto PhiMAV = MetadataAsValue::get(C, ValueAsMetadata::get(PHI));
     for (auto VI : PHI->operand_values()) {
       auto V = DbgValueMap.find(VI);
       if (V != DbgValueMap.end()) {
         auto *DbgII = cast<DbgInfoIntrinsic>(V->second);
         Instruction *NewDbgII = DbgII->clone();
-        auto PhiMAV = MetadataAsValue::get(C, ValueAsMetadata::get(PHI));
         NewDbgII->setOperand(0, PhiMAV);
-        BasicBlock *Parent = PHI->getParent();
         auto InsertionPt = Parent->getFirstInsertionPt();
         assert(InsertionPt != Parent->end() && "Ill-formed basic block");
         NewDbgII->insertBefore(&*InsertionPt);
@@ -1486,12 +1489,18 @@ void llvm::replaceDbgValueForAlloca(AllocaInst *AI, Value *NewAllocaAddress,
 }
 
 void llvm::salvageDebugInfo(Instruction &I) {
+  // This function is hot. An early check to determine whether the instruction
+  // has any metadata to save allows it to return earlier on average.
+  if (!I.isUsedByMetadata())
+    return;
+
   SmallVector<DbgInfoIntrinsic *, 1> DbgUsers;
   findDbgUsers(DbgUsers, &I);
   if (DbgUsers.empty())
     return;
 
   auto &M = *I.getModule();
+  auto &DL = M.getDataLayout();
 
   auto wrapMD = [&](Value *V) {
     return MetadataAsValue::get(I.getContext(), ValueAsMetadata::get(V));
@@ -1519,7 +1528,7 @@ void llvm::salvageDebugInfo(Instruction &I) {
   };
 
   if (auto *CI = dyn_cast<CastInst>(&I)) {
-    if (!CI->isNoopCast(M.getDataLayout()))
+    if (!CI->isNoopCast(DL))
       return;
 
     // No-op casts are irrelevant for debug info.
@@ -1530,7 +1539,7 @@ void llvm::salvageDebugInfo(Instruction &I) {
     }
   } else if (auto *GEP = dyn_cast<GetElementPtrInst>(&I)) {
     unsigned BitWidth =
-        M.getDataLayout().getPointerSizeInBits(GEP->getPointerAddressSpace());
+        M.getDataLayout().getIndexSizeInBits(GEP->getPointerAddressSpace());
     // Rewrite a constant GEP into a DIExpression.  Since we are performing
     // arithmetic to compute the variable's *value* in the DIExpression, we
     // need to mark the expression with a DW_OP_stack_value.
@@ -1539,6 +1548,7 @@ void llvm::salvageDebugInfo(Instruction &I) {
       for (auto *DII : DbgUsers)
         applyOffset(DII, Offset.getSExtValue());
   } else if (auto *BI = dyn_cast<BinaryOperator>(&I)) {
+    // Rewrite binary operations with constant integer operands.
     auto *ConstInt = dyn_cast<ConstantInt>(I.getOperand(1));
     if (!ConstInt || ConstInt->getBitWidth() > 64)
       return;
@@ -1563,6 +1573,9 @@ void llvm::salvageDebugInfo(Instruction &I) {
         break;
       case Instruction::Or:
         applyOps(DII, {dwarf::DW_OP_constu, Val, dwarf::DW_OP_or});
+        break;
+      case Instruction::And:
+        applyOps(DII, {dwarf::DW_OP_constu, Val, dwarf::DW_OP_and});
         break;
       case Instruction::Xor:
         applyOps(DII, {dwarf::DW_OP_constu, Val, dwarf::DW_OP_xor});
@@ -2157,7 +2170,7 @@ void llvm::copyRangeMetadata(const DataLayout &DL, const LoadInst &OldLI,
   if (!NewTy->isPointerTy())
     return;
 
-  unsigned BitWidth = DL.getTypeSizeInBits(NewTy);
+  unsigned BitWidth = DL.getIndexTypeSizeInBits(NewTy);
   if (!getConstantRangeFromMetadata(*N).contains(APInt(BitWidth, 0))) {
     MDNode *NN = MDNode::get(OldLI.getContext(), None);
     NewLI.setMetadata(LLVMContext::MD_nonnull, NN);
