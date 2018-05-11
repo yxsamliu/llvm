@@ -57,6 +57,24 @@ AMDGPUInstructionSelector::AMDGPUInstructionSelector(
 
 const char *AMDGPUInstructionSelector::getName() { return DEBUG_TYPE; }
 
+bool AMDGPUInstructionSelector::selectCOPY(MachineInstr &I) const {
+  MachineBasicBlock *BB = I.getParent();
+  MachineFunction *MF = BB->getParent();
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  I.setDesc(TII.get(TargetOpcode::COPY));
+  for (const MachineOperand &MO : I.operands()) {
+    if (TargetRegisterInfo::isPhysicalRegister(MO.getReg()))
+      continue;
+
+    const TargetRegisterClass *RC =
+            TRI.getConstrainedRegClassForOperand(MO, MRI);
+    if (!RC)
+      continue;
+    RBI.constrainGenericRegister(MO.getReg(), *RC, MRI);
+  }
+  return true;
+}
+
 MachineOperand
 AMDGPUInstructionSelector::getSubOperand64(MachineOperand &MO,
                                            unsigned SubIdx) const {
@@ -437,10 +455,13 @@ bool AMDGPUInstructionSelector::select(MachineInstr &I,
   switch (I.getOpcode()) {
   default:
     break;
+  case TargetOpcode::G_FPTOUI:
   case TargetOpcode::G_OR:
     return selectImpl(I, CoverageInfo);
   case TargetOpcode::G_ADD:
     return selectG_ADD(I);
+  case TargetOpcode::G_BITCAST:
+    return selectCOPY(I);
   case TargetOpcode::G_CONSTANT:
     return selectG_CONSTANT(I);
   case TargetOpcode::G_GEP:
@@ -460,5 +481,15 @@ InstructionSelector::ComplexRendererFns
 AMDGPUInstructionSelector::selectVSRC0(MachineOperand &Root) const {
   return {{
       [=](MachineInstrBuilder &MIB) { MIB.add(Root); }
+  }};
+}
+
+InstructionSelector::ComplexRendererFns
+AMDGPUInstructionSelector::selectVOP3Mods0(MachineOperand &Root) const {
+  return {{
+      [=](MachineInstrBuilder &MIB) { MIB.add(Root); },
+      [=](MachineInstrBuilder &MIB) { MIB.addImm(0); }, // src0_mods
+      [=](MachineInstrBuilder &MIB) { MIB.addImm(0); }, // clamp
+      [=](MachineInstrBuilder &MIB) { MIB.addImm(0); }  // omod
   }};
 }
