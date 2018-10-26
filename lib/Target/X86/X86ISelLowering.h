@@ -355,6 +355,9 @@ namespace llvm {
       // Bit field extract.
       BEXTR,
 
+      // Zero High Bits Starting with Specified Bit Position.
+      BZHI,
+
       // LOW, HI, FLAGS = umul LHS, RHS.
       UMUL,
 
@@ -871,6 +874,12 @@ namespace llvm {
                                                  TargetLoweringOpt &TLO,
                                                  unsigned Depth) const override;
 
+    bool SimplifyDemandedBitsForTargetNode(SDValue Op,
+                                           const APInt &DemandedBits,
+                                           KnownBits &Known,
+                                           TargetLoweringOpt &TLO,
+                                           unsigned Depth) const override;
+
     SDValue unwrapAddress(SDValue N) const override;
 
     bool isGAPlusOffset(SDNode *N, const GlobalValue* &GA,
@@ -936,6 +945,8 @@ namespace llvm {
     /// add a register and the immediate without having to materialize
     /// the immediate into a register.
     bool isLegalAddImmediate(int64_t Imm) const override;
+
+    bool isLegalStoreImmediate(int64_t Imm) const override;
 
     /// Return the cost of the scaling factor used in the addressing
     /// mode represented by AM for this target, for a load/store

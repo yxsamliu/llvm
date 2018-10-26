@@ -176,7 +176,6 @@ private:
 
   SDValue ExpandBITREVERSE(SDValue Op, const SDLoc &dl);
   SDValue ExpandBSWAP(SDValue Op, const SDLoc &dl);
-  SDValue ExpandBitCount(unsigned Opc, SDValue Op, const SDLoc &dl);
 
   SDValue ExpandExtractFromVectorThroughStack(SDValue Op);
   SDValue ExpandInsertToVectorThroughStack(SDValue Op);
@@ -1115,7 +1114,8 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
     Action = TLI.getStrictFPOperationAction(Node->getOpcode(),
                                             Node->getValueType(0));
     break;
-  case ISD::SADDSAT: {
+  case ISD::SADDSAT:
+  case ISD::UADDSAT: {
     Action = TLI.getOperationAction(Node->getOpcode(), Node->getValueType(0));
     break;
   }
@@ -2369,88 +2369,30 @@ SDValue SelectionDAGLegalize::ExpandLegalINT_TO_FP(bool isSigned, SDValue Op0,
   assert(!isSigned && "Legalize cannot Expand SINT_TO_FP for i64 yet");
   // Code below here assumes !isSigned without checking again.
 
-  // Implementation of unsigned i64 to f64 following the algorithm in
-  // __floatundidf in compiler_rt. This implementation has the advantage
-  // of performing rounding correctly, both in the default rounding mode
-  // and in all alternate rounding modes.
-  // TODO: Generalize this for use with other types.
-  if (SrcVT == MVT::i64 && DestVT == MVT::f64) {
-    LLVM_DEBUG(dbgs() << "Converting unsigned i64 to f64\n");
-    SDValue TwoP52 = DAG.getConstant(UINT64_C(0x4330000000000000), dl, SrcVT);
-    SDValue TwoP84PlusTwoP52 = DAG.getConstantFP(
-        BitsToDouble(UINT64_C(0x4530000000100000)), dl, DestVT);
-    SDValue TwoP84 = DAG.getConstant(UINT64_C(0x4530000000000000), dl, SrcVT);
-    SDValue LoMask = DAG.getConstant(UINT64_C(0x00000000FFFFFFFF), dl, SrcVT);
-    SDValue HiShift = DAG.getConstant(32, dl, ShiftVT);
-
-    SDValue Lo = DAG.getNode(ISD::AND, dl, SrcVT, Op0, LoMask);
-    SDValue Hi = DAG.getNode(ISD::SRL, dl, SrcVT, Op0, HiShift);
-    SDValue LoOr = DAG.getNode(ISD::OR, dl, SrcVT, Lo, TwoP52);
-    SDValue HiOr = DAG.getNode(ISD::OR, dl, SrcVT, Hi, TwoP84);
-    SDValue LoFlt = DAG.getNode(ISD::BITCAST, dl, DestVT, LoOr);
-    SDValue HiFlt = DAG.getNode(ISD::BITCAST, dl, DestVT, HiOr);
-    SDValue HiSub = DAG.getNode(ISD::FSUB, dl, DestVT, HiFlt, TwoP84PlusTwoP52);
-    return DAG.getNode(ISD::FADD, dl, DestVT, LoFlt, HiSub);
-  }
-
   // TODO: Generalize this for use with other types.
   if (SrcVT == MVT::i64 && DestVT == MVT::f32) {
     LLVM_DEBUG(dbgs() << "Converting unsigned i64 to f32\n");
     // For unsigned conversions, convert them to signed conversions using the
     // algorithm from the x86_64 __floatundidf in compiler_rt.
-    if (!isSigned) {
-      SDValue Fast = DAG.getNode(ISD::SINT_TO_FP, dl, MVT::f32, Op0);
+    SDValue Fast = DAG.getNode(ISD::SINT_TO_FP, dl, DestVT, Op0);
 
-      SDValue ShiftConst = DAG.getConstant(1, dl, ShiftVT);
-      SDValue Shr = DAG.getNode(ISD::SRL, dl, MVT::i64, Op0, ShiftConst);
-      SDValue AndConst = DAG.getConstant(1, dl, MVT::i64);
-      SDValue And = DAG.getNode(ISD::AND, dl, MVT::i64, Op0, AndConst);
-      SDValue Or = DAG.getNode(ISD::OR, dl, MVT::i64, And, Shr);
+    SDValue ShiftConst = DAG.getConstant(1, dl, ShiftVT);
+    SDValue Shr = DAG.getNode(ISD::SRL, dl, SrcVT, Op0, ShiftConst);
+    SDValue AndConst = DAG.getConstant(1, dl, SrcVT);
+    SDValue And = DAG.getNode(ISD::AND, dl, SrcVT, Op0, AndConst);
+    SDValue Or = DAG.getNode(ISD::OR, dl, SrcVT, And, Shr);
 
-      SDValue SignCvt = DAG.getNode(ISD::SINT_TO_FP, dl, MVT::f32, Or);
-      SDValue Slow = DAG.getNode(ISD::FADD, dl, MVT::f32, SignCvt, SignCvt);
+    SDValue SignCvt = DAG.getNode(ISD::SINT_TO_FP, dl, DestVT, Or);
+    SDValue Slow = DAG.getNode(ISD::FADD, dl, DestVT, SignCvt, SignCvt);
 
-      // TODO: This really should be implemented using a branch rather than a
-      // select.  We happen to get lucky and machinesink does the right
-      // thing most of the time.  This would be a good candidate for a
-      //pseudo-op, or, even better, for whole-function isel.
-      SDValue SignBitTest = DAG.getSetCC(dl, getSetCCResultType(MVT::i64),
-        Op0, DAG.getConstant(0, dl, MVT::i64), ISD::SETLT);
-      return DAG.getSelect(dl, MVT::f32, SignBitTest, Slow, Fast);
-    }
-
-    // Otherwise, implement the fully general conversion.
-
-    SDValue And = DAG.getNode(ISD::AND, dl, MVT::i64, Op0,
-         DAG.getConstant(UINT64_C(0xfffffffffffff800), dl, MVT::i64));
-    SDValue Or = DAG.getNode(ISD::OR, dl, MVT::i64, And,
-         DAG.getConstant(UINT64_C(0x800), dl, MVT::i64));
-    SDValue And2 = DAG.getNode(ISD::AND, dl, MVT::i64, Op0,
-         DAG.getConstant(UINT64_C(0x7ff), dl, MVT::i64));
-    SDValue Ne = DAG.getSetCC(dl, getSetCCResultType(MVT::i64), And2,
-                              DAG.getConstant(UINT64_C(0), dl, MVT::i64),
-                              ISD::SETNE);
-    SDValue Sel = DAG.getSelect(dl, MVT::i64, Ne, Or, Op0);
-    SDValue Ge = DAG.getSetCC(dl, getSetCCResultType(MVT::i64), Op0,
-                              DAG.getConstant(UINT64_C(0x0020000000000000), dl,
-                                              MVT::i64),
-                              ISD::SETUGE);
-    SDValue Sel2 = DAG.getSelect(dl, MVT::i64, Ge, Sel, Op0);
-    EVT SHVT = TLI.getShiftAmountTy(Sel2.getValueType(), DAG.getDataLayout());
-
-    SDValue Sh = DAG.getNode(ISD::SRL, dl, MVT::i64, Sel2,
-                             DAG.getConstant(32, dl, SHVT));
-    SDValue Trunc = DAG.getNode(ISD::TRUNCATE, dl, MVT::i32, Sh);
-    SDValue Fcvt = DAG.getNode(ISD::UINT_TO_FP, dl, MVT::f64, Trunc);
-    SDValue TwoP32 =
-      DAG.getConstantFP(BitsToDouble(UINT64_C(0x41f0000000000000)), dl,
-                        MVT::f64);
-    SDValue Fmul = DAG.getNode(ISD::FMUL, dl, MVT::f64, TwoP32, Fcvt);
-    SDValue Lo = DAG.getNode(ISD::TRUNCATE, dl, MVT::i32, Sel2);
-    SDValue Fcvt2 = DAG.getNode(ISD::UINT_TO_FP, dl, MVT::f64, Lo);
-    SDValue Fadd = DAG.getNode(ISD::FADD, dl, MVT::f64, Fmul, Fcvt2);
-    return DAG.getNode(ISD::FP_ROUND, dl, MVT::f32, Fadd,
-                       DAG.getIntPtrConstant(0, dl));
+    // TODO: This really should be implemented using a branch rather than a
+    // select.  We happen to get lucky and machinesink does the right
+    // thing most of the time.  This would be a good candidate for a
+    // pseudo-op, or, even better, for whole-function isel.
+    SDValue SignBitTest =
+        DAG.getSetCC(dl, getSetCCResultType(SrcVT), Op0,
+                     DAG.getConstant(0, dl, SrcVT), ISD::SETLT);
+    return DAG.getSelect(dl, DestVT, SignBitTest, Slow, Fast);
   }
 
   SDValue Tmp1 = DAG.getNode(ISD::SINT_TO_FP, dl, DestVT, Op0);
@@ -2706,120 +2648,6 @@ SDValue SelectionDAGLegalize::ExpandBSWAP(SDValue Op, const SDLoc &dl) {
   }
 }
 
-/// Expand the specified bitcount instruction into operations.
-SDValue SelectionDAGLegalize::ExpandBitCount(unsigned Opc, SDValue Op,
-                                             const SDLoc &dl) {
-  EVT VT = Op.getValueType();
-  EVT ShVT = TLI.getShiftAmountTy(VT, DAG.getDataLayout());
-  unsigned Len = VT.getScalarSizeInBits();
-
-  switch (Opc) {
-  default: llvm_unreachable("Cannot expand this yet!");
-  case ISD::CTPOP: {
-    assert(VT.isInteger() && Len <= 128 && Len % 8 == 0 &&
-           "CTPOP not implemented for this type.");
-
-    // This is the "best" algorithm from
-    // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
-
-    SDValue Mask55 = DAG.getConstant(APInt::getSplat(Len, APInt(8, 0x55)),
-                                     dl, VT);
-    SDValue Mask33 = DAG.getConstant(APInt::getSplat(Len, APInt(8, 0x33)),
-                                     dl, VT);
-    SDValue Mask0F = DAG.getConstant(APInt::getSplat(Len, APInt(8, 0x0F)),
-                                     dl, VT);
-    SDValue Mask01 = DAG.getConstant(APInt::getSplat(Len, APInt(8, 0x01)),
-                                     dl, VT);
-
-    // v = v - ((v >> 1) & 0x55555555...)
-    Op = DAG.getNode(ISD::SUB, dl, VT, Op,
-                     DAG.getNode(ISD::AND, dl, VT,
-                                 DAG.getNode(ISD::SRL, dl, VT, Op,
-                                             DAG.getConstant(1, dl, ShVT)),
-                                 Mask55));
-    // v = (v & 0x33333333...) + ((v >> 2) & 0x33333333...)
-    Op = DAG.getNode(ISD::ADD, dl, VT,
-                     DAG.getNode(ISD::AND, dl, VT, Op, Mask33),
-                     DAG.getNode(ISD::AND, dl, VT,
-                                 DAG.getNode(ISD::SRL, dl, VT, Op,
-                                             DAG.getConstant(2, dl, ShVT)),
-                                 Mask33));
-    // v = (v + (v >> 4)) & 0x0F0F0F0F...
-    Op = DAG.getNode(ISD::AND, dl, VT,
-                     DAG.getNode(ISD::ADD, dl, VT, Op,
-                                 DAG.getNode(ISD::SRL, dl, VT, Op,
-                                             DAG.getConstant(4, dl, ShVT))),
-                     Mask0F);
-    // v = (v * 0x01010101...) >> (Len - 8)
-    if (Len > 8)
-      Op = DAG.getNode(ISD::SRL, dl, VT,
-                       DAG.getNode(ISD::MUL, dl, VT, Op, Mask01),
-                       DAG.getConstant(Len - 8, dl, ShVT));
-
-    return Op;
-  }
-  case ISD::CTLZ_ZERO_UNDEF:
-    // This trivially expands to CTLZ.
-    return DAG.getNode(ISD::CTLZ, dl, VT, Op);
-  case ISD::CTLZ: {
-    if (TLI.isOperationLegalOrCustom(ISD::CTLZ_ZERO_UNDEF, VT)) {
-      EVT SetCCVT = getSetCCResultType(VT);
-      SDValue CTLZ = DAG.getNode(ISD::CTLZ_ZERO_UNDEF, dl, VT, Op);
-      SDValue Zero = DAG.getConstant(0, dl, VT);
-      SDValue SrcIsZero = DAG.getSetCC(dl, SetCCVT, Op, Zero, ISD::SETEQ);
-      return DAG.getNode(ISD::SELECT, dl, VT, SrcIsZero,
-                         DAG.getConstant(Len, dl, VT), CTLZ);
-    }
-
-    // for now, we do this:
-    // x = x | (x >> 1);
-    // x = x | (x >> 2);
-    // ...
-    // x = x | (x >>16);
-    // x = x | (x >>32); // for 64-bit input
-    // return popcount(~x);
-    //
-    // Ref: "Hacker's Delight" by Henry Warren
-    for (unsigned i = 0; (1U << i) <= (Len / 2); ++i) {
-      SDValue Tmp3 = DAG.getConstant(1ULL << i, dl, ShVT);
-      Op = DAG.getNode(ISD::OR, dl, VT, Op,
-                       DAG.getNode(ISD::SRL, dl, VT, Op, Tmp3));
-    }
-    Op = DAG.getNOT(dl, Op, VT);
-    return DAG.getNode(ISD::CTPOP, dl, VT, Op);
-  }
-  case ISD::CTTZ_ZERO_UNDEF:
-    // This trivially expands to CTTZ.
-    return DAG.getNode(ISD::CTTZ, dl, VT, Op);
-  case ISD::CTTZ: {
-    if (TLI.isOperationLegalOrCustom(ISD::CTTZ_ZERO_UNDEF, VT)) {
-      EVT SetCCVT = getSetCCResultType(VT);
-      SDValue CTTZ = DAG.getNode(ISD::CTTZ_ZERO_UNDEF, dl, VT, Op);
-      SDValue Zero = DAG.getConstant(0, dl, VT);
-      SDValue SrcIsZero = DAG.getSetCC(dl, SetCCVT, Op, Zero, ISD::SETEQ);
-      return DAG.getNode(ISD::SELECT, dl, VT, SrcIsZero,
-                         DAG.getConstant(Len, dl, VT), CTTZ);
-    }
-
-    // for now, we use: { return popcount(~x & (x - 1)); }
-    // unless the target has ctlz but not ctpop, in which case we use:
-    // { return 32 - nlz(~x & (x-1)); }
-    // Ref: "Hacker's Delight" by Henry Warren
-    SDValue Tmp3 = DAG.getNode(ISD::AND, dl, VT,
-                               DAG.getNOT(dl, Op, VT),
-                               DAG.getNode(ISD::SUB, dl, VT, Op,
-                                           DAG.getConstant(1, dl, VT)));
-    // If ISD::CTLZ is legal and CTPOP isn't, then do that instead.
-    if (!TLI.isOperationLegal(ISD::CTPOP, VT) &&
-        TLI.isOperationLegal(ISD::CTLZ, VT))
-      return DAG.getNode(ISD::SUB, dl, VT,
-                         DAG.getConstant(Len, dl, VT),
-                         DAG.getNode(ISD::CTLZ, dl, VT, Tmp3));
-    return DAG.getNode(ISD::CTPOP, dl, VT, Tmp3);
-  }
-  }
-}
-
 bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
   LLVM_DEBUG(dbgs() << "Trying to expand node\n");
   SmallVector<SDValue, 8> Results;
@@ -2828,12 +2656,18 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
   bool NeedInvert;
   switch (Node->getOpcode()) {
   case ISD::CTPOP:
+    if (TLI.expandCTPOP(Node, Tmp1, DAG))
+      Results.push_back(Tmp1);
+    break;
   case ISD::CTLZ:
   case ISD::CTLZ_ZERO_UNDEF:
+    if (TLI.expandCTLZ(Node, Tmp1, DAG))
+      Results.push_back(Tmp1);
+    break;
   case ISD::CTTZ:
   case ISD::CTTZ_ZERO_UNDEF:
-    Tmp1 = ExpandBitCount(Node->getOpcode(), Node->getOperand(0), dl);
-    Results.push_back(Tmp1);
+    if (TLI.expandCTTZ(Node, Tmp1, DAG))
+      Results.push_back(Tmp1);
     break;
   case ISD::BITREVERSE:
     Results.push_back(ExpandBITREVERSE(Node->getOperand(0), dl));
@@ -3028,8 +2862,13 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     Results.push_back(Tmp1);
     break;
   }
-  case ISD::SINT_TO_FP:
   case ISD::UINT_TO_FP:
+    if (TLI.expandUINT_TO_FP(Node, Tmp1, DAG)) {
+      Results.push_back(Tmp1);
+      break;
+    }
+    LLVM_FALLTHROUGH;
+  case ISD::SINT_TO_FP:
     Tmp1 = ExpandLegalINT_TO_FP(Node->getOpcode() == ISD::SINT_TO_FP,
                                 Node->getOperand(0), Node->getValueType(0), dl);
     Results.push_back(Tmp1);
@@ -3247,7 +3086,12 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     Results.push_back(Tmp1);
     break;
   }
-
+  case ISD::FMINNUM:
+  case ISD::FMAXNUM: {
+    if (SDValue Expanded = TLI.expandFMINNUM_FMAXNUM(Node, DAG))
+      Results.push_back(Expanded);
+    break;
+  }
   case ISD::FSIN:
   case ISD::FCOS: {
     EVT VT = Node->getValueType(0);
@@ -3455,8 +3299,9 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     }
     break;
   }
-  case ISD::SADDSAT: {
-    Results.push_back(TLI.getExpandedSignedSaturationAddition(Node, DAG));
+  case ISD::SADDSAT:
+  case ISD::UADDSAT: {
+    Results.push_back(TLI.getExpandedSaturationAddition(Node, DAG));
     break;
   }
   case ISD::SADDO:

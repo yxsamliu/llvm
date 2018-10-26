@@ -4599,6 +4599,13 @@ Optional<unsigned> LoopVectorizationCostModel::computeMaxVF(bool OptForSize) {
     return None;
   }
 
+  // Record that scalar epilogue is not allowed.
+  LLVM_DEBUG(dbgs() << "LV: Not allowing scalar epilogue due to -Os/-Oz.\n");
+
+  // We don't create an epilogue when optimizing for size.
+  // Invalidate interleave groups that require an epilogue.
+  InterleaveInfo.invalidateGroupsRequiringScalarEpilogue();
+
   unsigned MaxVF = computeFeasibleMaxVF(OptForSize, TC);
 
   if (TC > 0 && TC % MaxVF == 0) {
@@ -4610,8 +4617,6 @@ Optional<unsigned> LoopVectorizationCostModel::computeMaxVF(bool OptForSize) {
   // found modulo the vectorization factor is not zero, try to fold the tail
   // by masking.
   // FIXME: look for a smaller MaxVF that does divide TC rather than masking.
-  // FIXME: return None if loop requiresScalarEpilog(<MaxVF>), or look for a
-  //        smaller MaxVF that does not require a scalar epilog.
   if (Legal->canFoldTailByMasking()) {
     FoldTailByMasking = true;
     return MaxVF;
@@ -6012,8 +6017,14 @@ LoopVectorizationPlanner::plan(bool OptForSize, unsigned UserVF) {
     return NoVectorization;
 
   // Invalidate interleave groups if all blocks of loop will be predicated.
-  if (CM.blockNeedsPredication(OrigLoop->getHeader()))
+  if (CM.blockNeedsPredication(OrigLoop->getHeader()) &&
+      !useMaskedInterleavedAccesses(*TTI)) {
+    LLVM_DEBUG(
+        dbgs()
+        << "LV: Invalidate all interleaved groups due to fold-tail by masking "
+           "which requires masked-interleaved support.\n");
     CM.InterleaveInfo.reset();
+  }
 
   if (UserVF) {
     LLVM_DEBUG(dbgs() << "LV: Using user VF " << UserVF << ".\n");
